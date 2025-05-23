@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Микросервисное веб‑приложение</title>
+  <!-- Tailwind CDN (при желании можно удалить) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Supabase SDK -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col">
+
+  <!-- █████████  Шапка  █████████ -->
+  <header class="bg-white shadow p-4 flex justify-between items-center">
+    <h1 class="text-xl font-bold">Микросервисы</h1>
+    <div id="user-info" class="hidden">
+      <span id="username" class="mr-4"></span>
+      <button id="logout-btn" class="bg-red-500 text-white px-3 py-1 rounded">Выйти</button>
+    </div>
+  </header>
+
+  <!-- █████████  Контейнер  █████████ -->
+  <div class="flex flex-1">
+
+    <!-- ░░ Левое меню ░░ -->
+    <nav id="sidebar" class="w-56 bg-white border-r p-4 hidden">
+      <ul class="space-y-2">
+        <li><button data-service="1" class="service-btn text-left w-full px-3 py-2 rounded hover:bg-gray-200">🛠️ Подбор оборудования</button></li>
+        <li><button data-service="2" class="service-btn text-left w-full px-3 py-2 rounded hover:bg-gray-200">📄 Сервис 2 (скоро)</button></li>
+        <li><button data-service="3" class="service-btn text-left w-full px-3 py-2 rounded hover:bg-gray-200">📊 Сервис 3 (скоро)</button></li>
+      </ul>
+    </nav>
+
+    <!-- ░░ Основной контент ░░ -->
+    <main id="content" class="flex-1 p-6">
+      <!-- Сюда динамически подгружается modalN.html -->
+    </main>
+  </div>
+
+  <!-- █████████  Модалки аутентификации  █████████ -->
+  <div id="auth-modal" class="fixed inset-0 bg-black/50 flex items-center justify-center">
+    <div class="bg-white p-8 rounded shadow w-96">
+      <!-- форма регистрации -->
+      <form id="signup-form" class="space-y-3">
+        <h2 class="text-lg font-semibold">Регистрация</h2>
+        <input type="email" id="su-email" placeholder="E‑mail" class="w-full border px-3 py-2" required>
+        <input type="password" id="su-pass" placeholder="Пароль" class="w-full border px-3 py-2" required>
+        <input type="text" id="su-name" placeholder="Имя пользователя" class="w-full border px-3 py-2" required>
+        <button class="bg-blue-600 text-white w-full py-2 rounded">Создать аккаунт</button>
+      </form>
+      <hr class="my-4">
+      <!-- форма входа -->
+      <form id="login-form" class="space-y-3">
+        <h2 class="text-lg font-semibold">Вход</h2>
+        <input type="email" id="li-email" placeholder="E‑mail" class="w-full border px-3 py-2" required>
+        <input type="password" id="li-pass" placeholder="Пароль" class="w-full border px-3 py-2" required>
+        <button class="bg-green-600 text-white w-full py-2 rounded">Войти</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- █████████  Скрипты  █████████ -->
+  <script type="module">
+    //───────────────────────────────────────────────────────────────────────────
+    //  //инициализация Supabase
+    //───────────────────────────────────────────────────────────────────────────
+    const SUPABASE_URL  = 'https://uuzsujqizwkqhwijrszr.supabase.co';
+    const SUPABASE_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV1enN1anFpendrcWh3aWpyc3pyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDc5OTkzMDMsImV4cCI6MjA2MzU3NTMwM30.g9OD47l7kTVvK628mffBNwcX6gZXMiM8MoAK5uq0gBo';
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    //───────────────────────────────────────────────────────────────────────────
+    //  //функция проверки сессии
+    //───────────────────────────────────────────────────────────────────────────
+    async function checkSession() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        startApp(session);
+      } else {
+        document.getElementById('auth-modal').classList.remove('hidden');
+      }
+    }
+
+    //───────────────────────────────────────────────────────────────────────────
+    //  //запуск приложения после логина
+    //───────────────────────────────────────────────────────────────────────────
+    async function startApp(session) {
+      // скрываем модалку авторизации, показываем меню
+      document.getElementById('auth-modal').classList.add('hidden');
+      document.getElementById('sidebar').classList.remove('hidden');
+      document.getElementById('user-info').classList.remove('hidden');
+
+      // выводим имя
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('username, balance')
+        .eq('id', session.user.id)
+        .single();
+
+      document.getElementById('username').textContent =
+        `${profile?.username || session.user.email} | ₽${profile?.balance ?? 0}`;
+
+      // подгружаем микросервис 1 по умолчанию
+      loadService(1);
+    }
+
+    //───────────────────────────────────────────────────────────────────────────
+    //  //регистрация пользователя
+    //───────────────────────────────────────────────────────────────────────────
+    document.getElementById('signup-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = document.getElementById('su-email').value;
+      const pass  = document.getElementById('su-pass').value;
+      const name  = document.getElementById('su-name').value;
+
+      const { data, error } = await supabase.auth.signUp({
+        email, password: pass, options: { data: { username: name } }
+      });
+      if (error) return alert(error.message);
+
+      // создаём профиль
+      await supabase.from('profiles').insert({ id: data.user.id, username: name });
+      alert('Подтвердите e‑mail и войдите.');
+    });
+
+    //───────────────────────────────────────────────────────────────────────────
+    //  //вход пользователя
+    //───────────────────────────────────────────────────────────────────────────
+    document.getElementById('login-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = document.getElementById('li-email').value;
+      const pass  = document.getElementById('li-pass').value;
+
+      const { error } = await supabase.auth.signInWithPassword({ email, password: pass });
+      if (error) return alert(error.message);
+
+      checkSession();
+    });
+
+    //───────────────────────────────────────────────────────────────────────────
+    //  //выход
+    //───────────────────────────────────────────────────────────────────────────
+    document.getElementById('logout-btn').onclick = async () => {
+      await supabase.auth.signOut();
+      location.reload();
+    };
+
+    //───────────────────────────────────────────────────────────────────────────
+    //  //переключатель сервисов
+    //───────────────────────────────────────────────────────────────────────────
+    document.querySelectorAll('.service-btn').forEach(btn => {
+      btn.addEventListener('click', () => loadService(btn.dataset.service));
+    });
+
+    //───────────────────────────────────────────────────────────────────────────
+    //  //загрузка HTML‑фрагмента микросервиса
+    //───────────────────────────────────────────────────────────────────────────
+    async function loadService(no) {
+      const res = await fetch(`modal${no}.html`);
+      document.getElementById('content').innerHTML = await res.text();
+      // даём микросервису доступ к супабейзу через глобальный объект
+      document.dispatchEvent(new CustomEvent('supabase-ready', { detail: { supabase } }));
+    }
+
+    checkSession();
+  </script>
+</body>
+</html>
