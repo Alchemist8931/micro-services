@@ -1,0 +1,142 @@
+<!-- modal1.html -->
+<section class="space-y-6">
+  <h2 class="text-2xl font-semibold mb-4">🛠️ Подбор оборудования по ТЗ</h2>
+
+  <!-- ░░ Форма запроса ░░ -->
+  <form id="req-form" class="bg-white p-6 rounded shadow space-y-4">
+    <!--//текстовый запрос-->
+    <textarea id="prompt" rows="4" class="w-full border p-3" placeholder="Введите запрос…"></textarea>
+
+    <!--//загрузка файла-->
+    <input type="file" id="ts-file" accept=".pdf,.doc,.docx,.xls,.xlsx,.csv" required>
+
+    <!--//кнопка отправки-->
+    <button class="bg-blue-600 text-white px-4 py-2 rounded">Отправить</button>
+  </form>
+
+  <!-- ░░ Индикатор статуса ░░ -->
+  <div id="status" class="hidden text-sm text-gray-600"></div>
+
+  <!-- ░░ История запросов ░░ -->
+  <div>
+    <h3 class="text-lg font-semibold mb-2">История</h3>
+    <table id="history" class="min-w-full bg-white rounded shadow text-sm">
+      <thead class="bg-gray-100">
+        <tr>
+          <th class="p-2 text-left">Дата</th>
+          <th class="p-2 text-left">Запрос</th>
+          <th class="p-2 text-left">Файл‑ответ</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</section>
+
+<script type="module">
+  //───────────────────────────────────────────────────────────────────────────
+  //  //достаём supabase, переданный из index.html
+  //───────────────────────────────────────────────────────────────────────────
+  let supabase;
+  document.addEventListener('supabase-ready', (e) => {
+    supabase = e.detail.supabase;
+    loadHistory();
+  });
+
+  //───────────────────────────────────────────────────────────────────────────
+  //  //обработка формы
+  //───────────────────────────────────────────────────────────────────────────
+  document.getElementById('req-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fileInput = document.getElementById('ts-file');
+    const prompt    = document.getElementById('prompt').value.trim();
+
+    if (!fileInput.files.length) return alert('Приложите файл ТЗ');
+
+    // //отображаем статус
+    setStatus('Загрузка файла…');
+
+    //──────────────────── 1. Загружаем файл в Storage
+    const file      = fileInput.files[0];
+    const filename  = `${crypto.randomUUID()}_${file.name}`;
+    const { data: uploadData, error: upErr } = await supabase
+      .storage.from('user-uploads')
+      .upload(filename, file, { upsert: false });
+
+    if (upErr) { setStatus(upErr.message); return; }
+    const filePath = uploadData.path;
+
+    //──────────────────── 2. Создаём запись в service_requests
+    setStatus('Создание запроса…');
+    const { data: reqRow, error: insErr } = await supabase
+      .from('service_requests')
+      .insert({
+        user_id: (await supabase.auth.getUser()).data.user.id,
+        service_no: 1,
+        prompt,
+        file_path: filePath
+      })
+      .select('*')
+      .single();
+
+    if (insErr) { setStatus(insErr.message); return; }
+
+    //──────────────────── 3. Вызываем Edge‑Function‑прокси → GPT
+    setStatus('Обработка GPT… (это может занять время)');
+    const proxyRes = await fetch('/functions/v1/equip-selector', {   // //прокси‑функция
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ request_id: reqRow.id })
+    });
+    if (!proxyRes.ok) { setStatus('Ошибка функции'); return; }
+    const { result_path } = await proxyRes.json();
+
+    //──────────────────── 4. Обновляем строку + выводим результат
+    await supabase
+      .from('service_requests')
+      .update({ response_path: result_path, status: 'done' })
+      .eq('id', reqRow.id);
+
+    setStatus('Готово!');
+    loadHistory();          // обновляем историю
+    e.target.reset();       // чистим форму
+  });
+
+  //───────────────────────────────────────────────────────────────────────────
+  //  //загрузка истории текущего пользователя
+  //───────────────────────────────────────────────────────────────────────────
+  async function loadHistory() {
+    const tbody = document.querySelector('#history tbody');
+    tbody.innerHTML = '';
+
+    const { data, error } = await supabase
+      .from('service_requests')
+      .select('id, created_at, prompt, response_path')
+      .eq('service_no', 1)
+      .order('created_at', { ascending: false });
+
+    if (error) return alert(error.message);
+
+    for (const row of data) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td class="border-t p-2">${new Date(row.created_at).toLocaleString()}</td>
+        <td class="border-t p-2">${row.prompt.slice(0, 50)}…</td>
+        <td class="border-t p-2">
+          ${row.response_path
+            ? `<a href="${supabase.storage.from('user-uploads').getPublicUrl(row.response_path).data.publicUrl}" target="_blank" class="text-blue-600 underline">скачать</a>`
+            : '—'}
+        </td>`;
+      tbody.appendChild(tr);
+    }
+  }
+
+  //───────────────────────────────────────────────────────────────────────────
+  //  //функция статуса
+  //───────────────────────────────────────────────────────────────────────────
+  function setStatus(txt) {
+    const el = document.getElementById('status');
+    el.textContent = txt;
+    el.classList.remove('hidden');
+  }
+</script>
