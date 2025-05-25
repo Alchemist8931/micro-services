@@ -3,14 +3,16 @@
 <head>
   <meta charset="UTF-8">
   <title>Микросервисное веб‑приложение</title>
-  <!-- Tailwind CDN (при желании можно удалить) -->
+
+  <!-- Tailwind (CDN‑вариант — оставляем для демо) -->
   <script src="https://cdn.tailwindcss.com"></script>
+
   <!-- Supabase SDK -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body class="bg-gray-100 min-h-screen flex flex-col">
 
-  <!-- █████████  Шапка  █████████ -->
+  <!-- █  Шапка  █ -->
   <header class="bg-white shadow p-4 flex justify-between items-center">
     <h1 class="text-xl font-bold">Микросервисы</h1>
     <div id="user-info" class="hidden">
@@ -19,159 +21,129 @@
     </div>
   </header>
 
-  <!-- █████████  Контейнер  █████████ -->
+  <!-- █  Контент  █ -->
   <div class="flex flex-1">
-
-    <!-- ░░ Левое меню ░░ -->
     <nav id="sidebar" class="w-56 bg-white border-r p-4 hidden">
       <ul class="space-y-2">
-        <li><button data-service="1" class="service-btn text-left w-full px-3 py-2 rounded hover:bg-gray-200">🛠️ Подбор оборудования</button></li>
-        <li><button data-service="2" class="service-btn text-left w-full px-3 py-2 rounded hover:bg-gray-200">📄 Сервис 2 (скоро)</button></li>
-        <li><button data-service="3" class="service-btn text-left w-full px-3 py-2 rounded hover:bg-gray-200">📊 Сервис 3 (скоро)</button></li>
+        <li><button data-service="1" class="service-btn w-full text-left px-3 py-2 rounded hover:bg-gray-200">🛠️ Подбор оборудования</button></li>
+        <li><button data-service="2" class="service-btn w-full text-left px-3 py-2 rounded hover:bg-gray-200">📄 Сервис 2 (скоро)</button></li>
+        <li><button data-service="3" class="service-btn w-full text-left px-3 py-2 rounded hover:bg-gray-200">📊 Сервис 3 (скоро)</button></li>
       </ul>
     </nav>
 
-    <!-- ░░ Основной контент ░░ -->
-    <main id="content" class="flex-1 p-6">
-      <!-- Сюда динамически подгружается modalN.html -->
-    </main>
+    <main id="content" class="flex-1 p-6"></main>
   </div>
 
-  <!-- █████████  Модалки аутентификации  █████████ -->
+  <!-- █  Модалка логина  █ -->
   <div id="auth-modal" class="fixed inset-0 bg-black/50 flex items-center justify-center">
     <div class="bg-white p-8 rounded shadow w-96">
-      <!-- форма регистрации -->
+      <!-- Регистрация -->
       <form id="signup-form" class="space-y-3">
         <h2 class="text-lg font-semibold">Регистрация</h2>
-        <input type="email" id="su-email" placeholder="E‑mail" class="w-full border px-3 py-2" required>
-        <input type="password" id="su-pass" placeholder="Пароль" class="w-full border px-3 py-2" required>
-        <input type="text" id="su-name" placeholder="Имя пользователя" class="w-full border px-3 py-2" required>
+        <input id="su-email"  type="email"    placeholder="E‑mail"  class="w-full border px-3 py-2" required>
+        <input id="su-pass"   type="password" placeholder="Пароль"  class="w-full border px-3 py-2" required>
+        <input id="su-name"   type="text"     placeholder="Имя"     class="w-full border px-3 py-2" required>
         <button class="bg-blue-600 text-white w-full py-2 rounded">Создать аккаунт</button>
       </form>
       <hr class="my-4">
-      <!-- форма входа -->
+      <!-- Вход -->
       <form id="login-form" class="space-y-3">
         <h2 class="text-lg font-semibold">Вход</h2>
-        <input type="email" id="li-email" placeholder="E‑mail" class="w-full border px-3 py-2" required>
-        <input type="password" id="li-pass" placeholder="Пароль" class="w-full border px-3 py-2" required>
+        <input id="li-email" type="email"    placeholder="E‑mail"  class="w-full border px-3 py-2" required>
+        <input id="li-pass"  type="password" placeholder="Пароль"  class="w-full border px-3 py-2" required>
         <button class="bg-green-600 text-white w-full py-2 rounded">Войти</button>
       </form>
     </div>
   </div>
 
-  <!-- █████████  Скрипты  █████████ -->
+  <!-- █  Основной скрипт (ES‑модуль)  █ -->
   <script type="module">
-    //───────────────────────────────────────────────────────────────────────────
-    //  //инициализация Supabase
-    //───────────────────────────────────────────────────────────────────────────
-    const SUPABASE_URL  = 'https://uuzsujqizwkqhwijrszr.supabase.co';
-    const SUPABASE_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV1enN1anFpendrcWh3aWpyc3pyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDc5OTkzMDMsImV4cCI6MjA2MzU3NTMwM30.g9OD47l7kTVvK628mffBNwcX6gZXMiM8MoAK5uq0gBo';
+    /* ─── 1. Константы проекта ─────────────────────────────────────────── */
+    const SUPABASE_URL = 'https://uuzsujqizwkqhwijrszr.supabase.co';
+    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV1enN1anFpendrcWh3aWpyc3pyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDc5OTkzMDMsImV4cCI6MjA2MzU3NTMwM30.g9OD47l7kTVvK628mffBNwcX6gZXMiM8MoAK5uq0gBo';
+
+    const OPENAI_KEY  = 'sk-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX'; // ← свой
+    window.OPENAI_KEY = OPENAI_KEY;
+
+    /* ─── 2. Supabase  ─────────────────────────────────────────────────── */
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-    const OPENAI_KEY = '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';
-    window.OPENAI_KEY = OPENAI_KEY;  
+    /* ─── 3. UI‑утилиты ────────────────────────────────────────────────── */
+    export async function refreshBalance() {
+      const uid = (await supabase.auth.getUser()).data.user.id;
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('username, balance')
+        .eq('id', uid).single();
+      if (error) { console.error(error); return; }
+      document.getElementById('username').textContent =
+        `${data.username || 'Профиль'} | ₽${data.balance}`;
+    }
+    window.refreshBalance = refreshBalance;   // доступно во всех modal‑скриптах
 
-    //───────────────────────────────────────────────────────────────────────────
-    //  //функция проверки сессии
-    //───────────────────────────────────────────────────────────────────────────
+    /* ─── 4. Аутентификация ────────────────────────────────────────────── */
     async function checkSession() {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        startApp(session);
-      } else {
+      const { data:{ session }} = await supabase.auth.getSession();
+      if (session) startApp(); else
         document.getElementById('auth-modal').classList.remove('hidden');
-      }
     }
 
-     // ──────────────────────────────────────────────────────────────────────
-     //  //функция обновления баланса (доступна из modal1.html через window)
-     // ──────────────────────────────────────────────────────────────────────
-     export async function refreshBalance() {          // ⬅ экспортируем
-       const uid = (await supabase.auth.getUser()).data.user.id;
-       const { data, error } = await supabase
-         .from('profiles')
-         .select('balance, username')
-         .eq('id', uid)
-         .single();
-       if (error) { console.error(error); return; }
- 
-       document.getElementById('username').textContent =
-         `${data.username || 'Профиль'} | ₽${data.balance}`;
-     }
+    async function startApp() {
+      document.getElementById('auth-modal').classList.add('hidden');
+      document.getElementById('sidebar').classList.remove('hidden');
+      document.getElementById('user-info').classList.remove('hidden');
+      await refreshBalance();
+      loadService(1);                       // по умолчанию
+    }
 
-    window.refreshBalance = refreshBalance;
-
-    //───────────────────────────────────────────────────────────────────────────
-    //  //запуск приложения после логина
-    //───────────────────────────────────────────────────────────────────────────
-    async function startApp(session) {
-
-       document.getElementById('auth-modal').classList.add('hidden');
-       document.getElementById('sidebar').classList.remove('hidden');
-       document.getElementById('user-info').classList.remove('hidden');
- 
-       await refreshBalance();                // ⬅ первое отображение баланса
-       loadService(1);
-     }
-
-    //───────────────────────────────────────────────────────────────────────────
-    //  //регистрация пользователя
-    //───────────────────────────────────────────────────────────────────────────
-    document.getElementById('signup-form').addEventListener('submit', async (e) => {
+    /* ─── 5. Слушатели форм ────────────────────────────────────────────── */
+    document.getElementById('signup-form').addEventListener('submit', async e => {
       e.preventDefault();
-      const email = document.getElementById('su-email').value;
-      const pass  = document.getElementById('su-pass').value;
-      const name  = document.getElementById('su-name').value;
-
+      const email = suEmail.value,  pass = suPass.value,  name = suName.value;
       const { data, error } = await supabase.auth.signUp({
-        email, password: pass, options: { data: { username: name } }
+        email, password: pass, options:{ data:{ username:name }}
       });
       if (error) return alert(error.message);
-
-      // создаём профиль
-      await supabase.from('profiles').insert({ id: data.user.id, username: name });
+      await supabase.from('profiles').insert({ id:data.user.id, username:name });
       alert('Подтвердите e‑mail и войдите.');
     });
 
-    //───────────────────────────────────────────────────────────────────────────
-    //  //вход пользователя
-    //───────────────────────────────────────────────────────────────────────────
-    document.getElementById('login-form').addEventListener('submit', async (e) => {
+    document.getElementById('login-form').addEventListener('submit', async e => {
       e.preventDefault();
-      const email = document.getElementById('li-email').value;
-      const pass  = document.getElementById('li-pass').value;
-
-      const { error } = await supabase.auth.signInWithPassword({ email, password: pass });
+      const { error } = await supabase.auth.signInWithPassword({
+        email: liEmail.value, password: liPass.value
+      });
       if (error) return alert(error.message);
-
       checkSession();
     });
 
-    //───────────────────────────────────────────────────────────────────────────
-    //  //выход
-    //───────────────────────────────────────────────────────────────────────────
-    document.getElementById('logout-btn').onclick = async () => {
-      await supabase.auth.signOut();
-      location.reload();
-    };
+    logoutBtn.onclick = async () => { await supabase.auth.signOut(); location.reload(); };
 
-    //───────────────────────────────────────────────────────────────────────────
-    //  //переключатель сервисов
-    //───────────────────────────────────────────────────────────────────────────
-    document.querySelectorAll('.service-btn').forEach(btn => {
-      btn.addEventListener('click', () => loadService(btn.dataset.service));
-    });
+    /* ─── 6. Навигация ─────────────────────────────────────────────────── */
+    document.querySelectorAll('.service-btn').forEach(btn =>
+      btn.onclick = () => loadService(btn.dataset.service));
 
-    //───────────────────────────────────────────────────────────────────────────
-    //  //загрузка HTML‑фрагмента микросервиса
-    //───────────────────────────────────────────────────────────────────────────
-    async function loadService(no) {
-      const res = await fetch(`modal${no}.html`);
-      document.getElementById('content').innerHTML = await res.text();
-      // даём микросервису доступ к супабейзу через глобальный объект
-      document.dispatchEvent(new CustomEvent('supabase-ready', { detail: { supabase } }));
+    /* helper: запуск ВСЕХ <script> из вставленного HTML */
+    function executeScripts(parent) {
+      parent.querySelectorAll('script').forEach(old => {
+        const s = document.createElement('script');
+        [...old.attributes].forEach(a => s.setAttribute(a.name, a.value));
+        s.textContent = old.textContent;
+        document.body.appendChild(s); old.remove();
+      });
     }
 
+    /* загрузить modalN.html */
+    async function loadService(n) {
+      const html = await fetch(`modal${n}.html?ts=${Date.now()}`).then(r => r.text());
+      const wrapper = document.getElementById('content');
+      wrapper.innerHTML = html;
+      executeScripts(wrapper);
+      /* делимся Supabase‑SDK */
+      document.dispatchEvent(new CustomEvent('supabase-ready', { detail:{ supabase }}));
+    }
+
+    /* ─── 7. Init ──────────────────────────────────────────────────────── */
     checkSession();
   </script>
 </body>
