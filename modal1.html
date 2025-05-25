@@ -1,34 +1,25 @@
-<!-- modal1.html -->
+<!-- modal1.html – отправка ТЗ → CSV‑ответ от GPT -->
 <section class="space-y-6">
   <h2 class="text-2xl font-semibold mb-4">🛠️ Подбор оборудования по ТЗ</h2>
 
   <!-- ░░ Форма запроса ░░ -->
   <form id="req-form" class="bg-white p-6 rounded shadow space-y-4">
-    <!-- //текстовый запрос -->
     <textarea id="prompt" rows="4" class="w-full border p-3"
               placeholder="Введите запрос…"></textarea>
-
-    <!-- //загрузка файла -->
     <input type="file" id="ts-file"
            accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt" required>
-
-    <!-- //кнопка -->
     <button class="bg-blue-600 text-white px-4 py-2 rounded">Отправить</button>
   </form>
 
-  <!-- ░░ Индикатор статуса ░░ -->
   <div id="status" class="hidden text-sm text-gray-600"></div>
 
-  <!-- ░░ История запросов ░░ -->
   <div>
     <h3 class="text-lg font-semibold mb-2">История</h3>
     <table id="history" class="min-w-full bg-white rounded shadow text-sm">
       <thead class="bg-gray-100">
-        <tr>
-          <th class="p-2 text-left">Дата</th>
-          <th class="p-2 text-left">Запрос</th>
-          <th class="p-2 text-left">Файл‑ответ</th>
-        </tr>
+        <tr><th class="p-2 text-left">Дата</th>
+            <th class="p-2 text-left">Запрос</th>
+            <th class="p-2 text-left">Файл‑ответ</th></tr>
       </thead>
       <tbody></tbody>
     </table>
@@ -36,107 +27,111 @@
 </section>
 
 <script type="module">
-/*──────────────────────────── 1. Получаем Supabase из index.html ──────────*/
 let supabase;
 document.addEventListener('supabase-ready', (e) => {
   supabase = e.detail.supabase;
   loadHistory();
 });
 
-/*──────────────────────────── 2. Обработка формы ──────────────────────────*/
+/*────────────────── Обработчик формы ──────────────────*/
 document.getElementById('req-form').addEventListener('submit', async (e) => {
   e.preventDefault();
-
-  /* 2.1  исходные данные */
-  const fileInput = document.getElementById('ts-file');
-  const prompt    = document.getElementById('prompt').value.trim();
-  if (!fileInput.files.length) return alert('Приложите файл ТЗ');
-
-  /* 2.2  списываем 400 ед. */
-  const uid = (await supabase.auth.getUser()).data.user.id;
-  const { data: newBalance, error: billErr } =
-        await supabase.rpc('charge_balance', { p_uid: uid, p_amount: 400 });
-  if (billErr)  { alert(billErr.message); return; }
-  if (newBalance === null) {
-    alert('Недостаточно средств (нужно 400)'); return;
-  }
-  window.refreshBalance?.();
-
-  /* 2.3  загружаем файл в Storage */
-  const file     = fileInput.files[0];
-  const filename = `${crypto.randomUUID()}_${file.name}`;
-  const { data: up, error: upErr } = await supabase
-        .storage.from('user-uploads').upload(filename, file, { upsert:false });
-  if (upErr) { setStatus(upErr.message); return; }
-  const filePath = up.path;
-
-  /* 2.4  создаём запись в service_requests (status=pending) */
-  setStatus('Создание запроса…');
-  const { data: reqRow, error: insErr } = await supabase
-        .from('service_requests')
-        .insert({
-          user_id: uid, service_no:1, prompt, file_path: filePath
-        })
-        .select('*').single();
-  if (insErr) { setStatus(insErr.message); return; }
-
-  /* 2.5  готовим текст для GPT */
-  let fileText = '';
   try {
-    fileText = await file.text();
-    if (fileText.length > 12_000)
-      fileText = fileText.slice(0, 12_000) + ' …[обрезано]';
-  } catch { /* бинарные файлы оставляем пустыми */ }
+    const fileInput = document.getElementById('ts-file');
+    const prompt    = document.getElementById('prompt').value.trim();
+    if (!fileInput.files.length) return alert('Приложите файл ТЗ');
 
-  /* 2.6  вызов OpenAI */
-  setStatus('Обработка GPT… (может занять до минуты)');
-  const gptBody = {
-    model: 'gpt-4o-mini',
-    temperature: 0.2,
-    messages: [
-      { role:'system',
-        content:'Ты инженер‑сметчик. Составь таблицу оборудования по ТЗ.' },
-      { role:'user',
-        content:
-          `Запрос: «${prompt}»\n\n` +
-          `Файл (фрагмент):\n${fileText}` }
-    ]
-  };
-  const openaiRes = await fetch('https://api.openai.com/v1/chat/completions', {
-    method:'POST',
-    headers:{
-      'Content-Type':'application/json',
-      'Authorization':`Bearer ${window.OPENAI_KEY}`
-    },
-    body: JSON.stringify(gptBody)
-  });
-  if (!openaiRes.ok) {
-    const err = await openaiRes.text();
-    setStatus('OpenAI error: ' + err);
-    return;
+    /* 1. списываем 400 ед. */
+    const uid = (await supabase.auth.getUser()).data.user.id;
+    const { data: newBal, error: billErr } =
+          await supabase.rpc('charge_balance', { p_uid: uid, p_amount: 400 });
+
+    if (billErr)      throw new Error(billErr.message);
+    if (newBal === null)
+      return alert('Недостаточно средств (нужно 400)');
+
+    window.refreshBalance?.();                   // сразу отображаем
+
+    /* 2. загружаем файл */
+    const file      = fileInput.files[0];
+    const filename  = `${crypto.randomUUID()}_${file.name}`;
+    const { error: upErr } = await supabase
+      .storage.from('user-uploads')
+      .upload(filename, file, { upsert:false });
+
+    if (upErr) throw new Error(upErr.message);
+    const filePath = filename;                   // гарантированно существует
+
+    /* 3. вставляем строку в service_requests */
+    setStatus('Создание запроса…');
+    const { data: reqRow, error: insErr } = await supabase
+      .from('service_requests')
+      .insert({ user_id:uid, service_no:1, prompt, file_path:filePath })
+      .select('*').single();
+
+    if (insErr) throw new Error('insert: ' + insErr.message);
+    if (!reqRow) throw new Error('RLS блокирует INSERT');
+
+    /* 4. подготавливаем текст для GPT */
+    let fileText = '';
+    try {
+      fileText = await file.text();
+      if (fileText.length > 12_000)
+        fileText = fileText.slice(0, 12_000) + ' …[обрезано]';
+    } catch { /* бинарные пропускаем */ }
+
+    /* 5. запрос к OpenAI */
+    setStatus('Обработка GPT — ждём ответ…');
+    const gptBody = {
+      model:'gpt-4o-mini',
+      temperature:0.2,
+      messages:[
+        { role:'system',
+          content:'Ты инженер‑сметчик. Составь CSV‑таблицу оборудования по ТЗ.' },
+        { role:'user',
+          content:`Запрос: «${prompt}»\n\nФайл (фрагмент):\n${fileText}` }
+      ]
+    };
+
+    const gpt = await fetch('https://api.openai.com/v1/chat/completions', {
+      method:'POST',
+      headers:{
+        'Content-Type':'application/json',
+        'Authorization':`Bearer ${window.OPENAI_KEY}`
+      },
+      body:JSON.stringify(gptBody)
+    });
+
+    if (!gpt.ok)
+      throw new Error('OpenAI HTTP ' + gpt.status + ': ' + await gpt.text());
+
+    const { choices } = await gpt.json();
+    const csvText = choices?.[0]?.message?.content || '';
+
+    /* 6. сохраняем CSV‑ответ */
+    const resultPath = `${reqRow.id}.csv`;
+    const { error: upResErr } = await supabase.storage.from('user-uploads')
+      .upload(resultPath, new Blob([csvText], { type:'text/csv' }), { upsert:true });
+    if (upResErr) throw new Error('upload result: ' + upResErr.message);
+
+    /* 7. UPDATE строки */
+    const { error: updErr } = await supabase
+      .from('service_requests')
+      .update({ response_path:resultPath, status:'done' })
+      .eq('id', reqRow.id);
+    if (updErr) throw new Error('update: ' + updErr.message);
+
+    setStatus('Готово ✅');
+    loadHistory();
+    e.target.reset();
+  } catch (err) {
+    console.error(err);
+    setStatus('Ошибка: ' + err.message);
+    // при откате надо вернуть деньги?  ─ зависит от логики; пока пропускаем
   }
-  const { choices } = await openaiRes.json();
-  const csvText = choices?.[0]?.message?.content || '—';
-
-  /* 2.7  сохраняем CSV‑ответ в Storage */
-  const resultPath = `${reqRow.id}.csv`;
-  await supabase.storage.from('user-uploads')
-        .upload(resultPath,
-                new Blob([csvText], { type:'text/csv;charset=utf-8' }),
-                { upsert:true });
-
-  /* 2.8  финальный UPDATE строки */
-  await supabase
-        .from('service_requests')
-        .update({ response_path: resultPath, status:'done' })
-        .eq('id', reqRow.id);
-
-  setStatus('Готово!');
-  loadHistory();
-  e.target.reset();
 });
 
-/*──────────────────────────── 3. История запросов ─────────────────────────*/
+/*────────────────── История запросов ──────────────────*/
 async function loadHistory() {
   const tbody = document.querySelector('#history tbody');
   tbody.innerHTML = '';
@@ -144,11 +139,11 @@ async function loadHistory() {
   const { data, error } = await supabase
     .from('service_requests')
     .select('id,created_at,prompt,response_path')
-    .eq('service_no', 1)
-    .eq('user_id', (await supabase.auth.getUser()).data.user.id)
-    .order('created_at', { ascending:false });
+    .eq('service_no',1)
+    .eq('user_id',(await supabase.auth.getUser()).data.user.id)
+    .order('created_at',{ ascending:false });
 
-  if (error) return alert(error.message);
+  if (error) { console.error(error); return; }
 
   for (const row of data) {
     const pubUrl = row.response_path
@@ -158,21 +153,20 @@ async function loadHistory() {
 
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td class="border-t p-2">${new Date(row.created_at)
-            .toLocaleString()}</td>
-      <td class="border-t p-2">${row.prompt.slice(0,50)}…</td>
+      <td class="border-t p-2">${new Date(row.created_at).toLocaleString()}</td>
+      <td class="border-t p-2">${row.prompt.slice(0,70)}…</td>
       <td class="border-t p-2">
-        ${pubUrl ? `<a href="${pubUrl}" class="underline text-blue-600"
-                      target="_blank">скачать</a>` : '—'}
+        ${pubUrl ? `<a href="${pubUrl}" target="_blank"
+                      class="underline text-blue-600">скачать</a>` : '—'}
       </td>`;
     tbody.appendChild(tr);
   }
 }
 
-/*──────────────────────────── 4. Маленький helper ─────────────────────────*/
-function setStatus(txt) {
+/*────────────────── Утилита статуса ──────────────────*/
+function setStatus(t) {
   const el = document.getElementById('status');
-  el.textContent = txt;
+  el.textContent = t;
   el.classList.remove('hidden');
 }
 </script>
