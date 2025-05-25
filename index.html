@@ -80,31 +80,34 @@
       }
     }
 
+     // ──────────────────────────────────────────────────────────────────────
+     //  //функция обновления баланса (доступна из modal1.html через window)
+     // ──────────────────────────────────────────────────────────────────────
+     export async function refreshBalance() {          // ⬅ экспортируем
+       const uid = (await supabase.auth.getUser()).data.user.id;
+       const { data, error } = await supabase
+         .from('profiles')
+         .select('balance, username')
+         .eq('id', uid)
+         .single();
+       if (error) { console.error(error); return; }
+ 
+       document.getElementById('username').textContent =
+         `${data.username || 'Профиль'} | ₽${data.balance}`;
+     }
+
     //───────────────────────────────────────────────────────────────────────────
     //  //запуск приложения после логина
     //───────────────────────────────────────────────────────────────────────────
     async function startApp(session) {
-      // скрываем модалку авторизации, показываем меню
-      document.getElementById('auth-modal').classList.add('hidden');
-      document.getElementById('sidebar').classList.remove('hidden');
-      document.getElementById('user-info').classList.remove('hidden');
 
-      // выводим имя и баланс
-      async function refreshBalance() {                  // <‑‑ новая функция
-  const uid = (await supabase.auth.getUser()).data.user.id;
-  const { data } = await supabase
-    .from('profiles')
-    .select('balance, username')
-    .eq('id', uid)
-    .single();
-
-  document.getElementById('username').textContent =
-    `${data.username || 'Профиль'} | ₽${data.balance}`;
-}
-
-      // подгружаем микросервис 1 по умолчанию
-      loadService(1);
-    }
+       document.getElementById('auth-modal').classList.add('hidden');
+       document.getElementById('sidebar').classList.remove('hidden');
+       document.getElementById('user-info').classList.remove('hidden');
+ 
+       await refreshBalance();                // ⬅ первое отображение баланса
+       loadService(1);
+     }
 
     //───────────────────────────────────────────────────────────────────────────
     //  //регистрация пользователя
