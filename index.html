@@ -114,6 +114,25 @@
        loadService(1);
      }
 
+    async function loadService(no) {
+  const html = await fetch(`modal${no}.html`).then(r => r.text());
+  const container = document.getElementById('content');
+  container.innerHTML = html;
+
+  // вытаскиваем ВСЕ <script> из вставленного HTML и исполняем
+  container.querySelectorAll('script').forEach(oldScript => {
+    const newScript = document.createElement('script');
+    // копируем атрибуты
+    [...oldScript.attributes].forEach(a => newScript.setAttribute(a.name, a.value));
+    newScript.textContent = oldScript.textContent;
+    document.body.appendChild(newScript);      // запускаем
+    oldScript.remove();                        // убираем «мертвый» тег
+  });
+
+  document.dispatchEvent(new CustomEvent('supabase-ready', { detail: { supabase } }));
+}
+
+
     //───────────────────────────────────────────────────────────────────────────
     //  //регистрация пользователя
     //───────────────────────────────────────────────────────────────────────────
