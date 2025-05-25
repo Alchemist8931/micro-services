@@ -3,7 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <title>Микросервисное веб‑приложение</title>
+
+  <!-- Tailwind (CDN‑вариант — годится для демо) -->
   <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Supabase SDK -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body class="bg-gray-100 min-h-screen flex flex-col">
@@ -13,7 +17,8 @@
     <h1 class="text-xl font-bold">Микросервисы</h1>
     <div id="user-info" class="hidden">
       <span id="username" class="mr-4"></span>
-      <button id="logout-btn" class="bg-red-500 text-white px-3 py-1 rounded">Выйти</button>
+      <button id="logout-btn"
+              class="bg-red-500 text-white px-3 py-1 rounded">Выйти</button>
     </div>
   </header>
 
@@ -32,7 +37,7 @@
   <!-- █  Логин/регистрация  █ -->
   <div id="auth-modal" class="fixed inset-0 bg-black/50 flex items-center justify-center">
     <div class="bg-white p-8 rounded shadow w-96">
-      <!-- рега -->
+      <!-- регистрация -->
       <form id="signup-form" class="space-y-3">
         <h2 class="text-lg font-semibold">Регистрация</h2>
         <input id="su-email"  type="email"    placeholder="E‑mail"  class="w-full border px-3 py-2" required>
@@ -55,19 +60,21 @@
   <script type="module">
     /*── 1. Конфиг ───────────────────────────────────────────────────────*/
     const SUPABASE_URL = 'https://uuzsujqizwkqhwijrszr.supabase.co';
-    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV1enN1anFpendrcWh3aWpyc3pyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDc5OTkzMDMsImV4cCI6MjA2MzU3NTMwM30.g9OD47l7kTVvK628mffBNwcX6gZXMiM8MoAK5uq0gBo';
-    const OPENAI_KEY   = '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';
-    window.OPENAI_KEY  = OPENAI_KEY;
+    const SUPABASE_KEY = 'eyJh…gBo';       // ваш anon‑key
+    const OPENAI_KEY   = 'sk-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX';
 
+    window.OPENAI_KEY  = OPENAI_KEY;
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-    /*── 2. DOM‑кеш ──────────────────────────────────────────────────────*/
-    const suEmail   = document.getElementById('su-email');
-    const suPass    = document.getElementById('su-pass');
-    const suName    = document.getElementById('su-name');
-    const liEmail   = document.getElementById('li-email');
-    const liPass    = document.getElementById('li-pass');
-    const logoutBtn = document.getElementById('logout-btn');
+    /*── 2. DOM‑элементы (кастомное «кэширование») ──────────────────────*/
+    const signupForm = document.getElementById('signup-form');
+    const loginForm  = document.getElementById('login-form');
+    const suEmail    = document.getElementById('su-email');
+    const suPass     = document.getElementById('su-pass');
+    const suName     = document.getElementById('su-name');
+    const liEmail    = document.getElementById('li-email');
+    const liPass     = document.getElementById('li-pass');
+    const logoutBtn  = document.getElementById('logout-btn');
 
     /*── 3. Баланс ──────────────────────────────────────────────────────*/
     export async function refreshBalance() {
@@ -94,7 +101,7 @@
       loadService(1);
     }
 
-    /*── 5. Реакции форм ────────────────────────────────────────────────*/
+    /*── 5. Обработчики форм ────────────────────────────────────────────*/
     signupForm.addEventListener('submit', async e => {
       e.preventDefault();
       const { data, error } = await supabase.auth.signUp({
@@ -115,12 +122,17 @@
       checkSession();
     });
 
-    logoutBtn.onclick = async () => { await supabase.auth.signOut(); location.reload(); };
+    logoutBtn.addEventListener('click', async () => {
+      await supabase.auth.signOut();
+      location.reload();
+    });
 
     /*── 6. Навигация ───────────────────────────────────────────────────*/
-    document.querySelectorAll('.service-btn').forEach(btn =>
-      btn.onclick = () => loadService(btn.dataset.service));
+    document.querySelectorAll('.service-btn')
+      .forEach(btn => btn.addEventListener('click',
+        () => loadService(btn.dataset.service)));
 
+    /* helper: выполнить все <script> из вставленного HTML */
     function executeScripts(parent) {
       parent.querySelectorAll('script').forEach(old => {
         const s = document.createElement('script');
@@ -135,6 +147,7 @@
       const container = document.getElementById('content');
       container.innerHTML = html;
       executeScripts(container);
+      /* делимся SDK */
       document.dispatchEvent(new CustomEvent('supabase-ready', { detail:{ supabase }}));
     }
 
