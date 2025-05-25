@@ -1,12 +1,12 @@
-<!-- modal1.html – микросервис «Подбор оборудования» -->
+<!-- modal1.html -->
 <section class="space-y-6">
   <h2 class="text-2xl font-semibold mb-4">🛠️ Подбор оборудования по ТЗ</h2>
 
   <form id="req-form" class="bg-white p-6 rounded shadow space-y-4">
     <textarea id="prompt-field" rows="4" class="w-full border p-3"
               placeholder="Введите запрос…"></textarea>
-    <input id="ts-file" type="file"
-           accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt" required>
+    <input  id="ts-file" type="file"
+            accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt" required>
     <button class="bg-blue-600 text-white px-4 py-2 rounded">Отправить</button>
   </form>
 
@@ -23,83 +23,94 @@
 </section>
 
 <script type="module">
-/*── 1. SDK ─────────────────────────────────────────────────────────────*/
-let supabase;
-document.addEventListener('supabase-ready', e => { supabase = e.detail.supabase; loadHistory(); });
+/* ── 1.  ждём Supabase ──────────────────────────────────────────────────*/
+let supabase;          // будет присвоен в колбэке
+document.addEventListener('supabase-ready', onReady, { once:true });
 
-/*── 2. Обработчик формы ────────────────────────────────────────────────*/
-const reqForm = document.getElementById('req-form');
-const tsFile  = document.getElementById('ts-file');
-const promptField = document.getElementById('prompt-field');
-const statusBox   = document.getElementById('status');
+function onReady(e) {
+  supabase = e.detail.supabase;           // ← теперь точно есть
+  attachSubmitHandler();                  // навешиваем только сейчас
+  loadHistory();                          // и сразу заполняем таблицу
+}
 
-reqForm.addEventListener('submit', async e => {
-  e.preventDefault();
-  try {
-    const file   = tsFile.files[0];
-    const prompt = promptField.value.trim();
-    if (!file) return alert('Приложите файл ТЗ');
+/* ── 2.  обработчик формы ──────────────────────────────────────────────*/
+function attachSubmitHandler() {
+  const form   = document.getElementById('req-form');
+  const fileIn = document.getElementById('ts-file');
+  const promptIn = document.getElementById('prompt-field');
+  const status = document.getElementById('status');
 
-    /* 2.1 списываем 400 */
-    const uid = (await supabase.auth.getUser()).data.user.id;
-    const { data:newBal, error:billErr } =
-      await supabase.rpc('charge_balance',{ p_uid:uid, p_amount:400 });
-    if (billErr) throw billErr;
-    if (newBal === null) return alert('Недостаточно средств');
-    window.refreshBalance?.();
+  form.addEventListener('submit', async ev => {
+    ev.preventDefault();
+    try {
+      if (!fileIn.files.length) { alert('Приложите файл ТЗ'); return; }
+      const file   = fileIn.files[0];
+      const prompt = promptIn.value.trim();
 
-    /* 2.2 upload файла */
-    const fname = `${crypto.randomUUID()}_${file.name}`;
-    const { error:upErr } =
-      await supabase.storage.from('user-uploads').upload(fname, file, { upsert:false });
-    if (upErr) throw upErr;
+      /* 2.1 списываем баланс */
+      const uid = (await supabase.auth.getUser()).data.user.id;
+      const { data:newBal, error:billErr } =
+        await supabase.rpc('charge_balance', { p_uid:uid, p_amount:400 });
+      if (billErr) throw billErr;
+      if (newBal === null) { alert('Недостаточно средств'); return; }
+      window.refreshBalance?.();
 
-    /* 2.3 INSERT history */
-    setStatus('Создание запроса…');
-    const { data:reqRow, error:insErr } = await supabase
-      .from('service_requests')
-      .insert({ user_id:uid, service_no:1, prompt, file_path:fname })
-      .select('*').single();
-    if (insErr) throw insErr;
+      /* 2.2 upload исходного файла */
+      const fname = `${crypto.randomUUID()}_${file.name}`;
+      const { error:upErr } =
+        await supabase.storage.from('user-uploads').upload(fname, file);
+      if (upErr) throw upErr;
 
-    /* 2.4 GPT */
-    setStatus('GPT обрабатывает…');
-    let txt = ''; try { txt = (await file.text()).slice(0, 12000); } catch {}
-    const body = {
-      model:'gpt-4o-mini', temperature:0.2,
-      messages:[
-        { role:'system', content:'Ты инженер‑сметчик. Составь CSV‑таблицу оборудования.' },
-        { role:'user',   content:`Запрос: «${prompt}»\n\nФайл:\n${txt}` }
-      ]
-    };
-    const gpt = await fetch('https://api.openai.com/v1/chat/completions',{
-      method:'POST',
-      headers:{ 'Content-Type':'application/json',
-                'Authorization':`Bearer ${window.OPENAI_KEY}` },
-      body:JSON.stringify(body)
-    });
-    if (!gpt.ok) throw new Error(`OpenAI ${gpt.status}`);
-    const csv = (await gpt.json()).choices?.[0]?.message?.content || '';
+      /* 2.3 запись в history */
+      setStatus('Создание запроса…');
+      const { data:reqRow, error:insErr } = await supabase
+        .from('service_requests')
+        .insert({ user_id:uid, service_no:1, prompt, file_path:fname })
+        .select('*').single();
+      if (insErr) throw insErr;
 
-    /* 2.5 upload ответа */
-    const resPath = `${reqRow.id}.csv`;
-    await supabase.storage.from('user-uploads')
-      .upload(resPath, new Blob([csv],{ type:'text/csv' }), { upsert:true });
+      /* 2.4 вызов GPT */
+      setStatus('GPT обрабатывает…');
+      let snippet = ''; try { snippet = (await file.text()).slice(0,12000);}catch{}
+      const body = {
+        model:'gpt-4o-mini',
+        messages:[
+          { role:'system', content:'Ты инженер‑сметчик. Составь CSV‑таблицу оборудования.'},
+          { role:'user',   content:`Запрос: «${prompt}»\n\nФайл:\n${snippet}` }
+        ]
+      };
+      const gpt = await fetch('https://api.openai.com/v1/chat/completions',{
+        method:'POST',
+        headers:{ 'Content-Type':'application/json',
+                  'Authorization':`Bearer ${window.OPENAI_KEY}`},
+        body:JSON.stringify(body)
+      });
+      if (!gpt.ok) throw new Error('OpenAI ' + gpt.status);
+      const csv = (await gpt.json()).choices?.[0]?.message?.content || '';
 
-    /* 2.6 UPDATE history */
-    await supabase.from('service_requests')
-      .update({ response_path:resPath, status:'done' }).eq('id', reqRow.id);
+      /* 2.5 upload результата */
+      const csvPath = `${reqRow.id}.csv`;
+      await supabase.storage.from('user-uploads')
+        .upload(csvPath, new Blob([csv],{ type:'text/csv' }), { upsert:true });
 
-    setStatus('Готово ✅');
-    loadHistory();
-    reqForm.reset();
-  } catch (err) {
-    console.error(err);
-    setStatus('Ошибка: ' + (err.message || err));
-  }
-});
+      /* 2.6 UPDATE history */
+      await supabase.from('service_requests')
+        .update({ response_path:csvPath, status:'done' })
+        .eq('id', reqRow.id);
 
-/*── 3. История ─────────────────────────────────────────────────────────*/
+      setStatus('Готово ✅');
+      loadHistory();
+      form.reset();
+    } catch (err) {
+      console.error(err);
+      setStatus('Ошибка: ' + (err.message || err));
+    }
+  });
+
+  function setStatus(txt){ status.textContent = txt; status.classList.remove('hidden'); }
+}
+
+/* ── 3.  история ───────────────────────────────────────────────────────*/
 async function loadHistory() {
   const tbody = document.querySelector('#history tbody'); tbody.innerHTML = '';
   const uid = (await supabase.auth.getUser()).data.user.id;
@@ -123,7 +134,4 @@ async function loadHistory() {
       </tr>`);
   }
 }
-
-/*── 4. helper ───────────────────────────────────────────────────────────*/
-function setStatus(t){ statusBox.textContent = t; statusBox.classList.remove('hidden'); }
 </script>
