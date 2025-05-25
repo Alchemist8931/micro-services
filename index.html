@@ -89,15 +89,18 @@
       document.getElementById('sidebar').classList.remove('hidden');
       document.getElementById('user-info').classList.remove('hidden');
 
-      // выводим имя
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('username, balance')
-        .eq('id', session.user.id)
-        .single();
+      // выводим имя и баланс
+      async function refreshBalance() {                  // <‑‑ новая функция
+  const uid = (await supabase.auth.getUser()).data.user.id;
+  const { data } = await supabase
+    .from('profiles')
+    .select('balance, username')
+    .eq('id', uid)
+    .single();
 
-      document.getElementById('username').textContent =
-        `${profile?.username || session.user.email} | ₽${profile?.balance ?? 0}`;
+  document.getElementById('username').textContent =
+    `${data.username || 'Профиль'} | ₽${data.balance}`;
+}
 
       // подгружаем микросервис 1 по умолчанию
       loadService(1);
