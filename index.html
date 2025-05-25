@@ -65,6 +65,7 @@
 
     window.OPENAI_KEY  = OPENAI_KEY;
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    window.sb = supabase;
 
     /*── 2. DOM‑элементы (кастомное «кэширование») ──────────────────────*/
     const signupForm = document.getElementById('signup-form');
