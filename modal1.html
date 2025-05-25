@@ -46,18 +46,29 @@
   //───────────────────────────────────────────────────────────────────────────
   //  //обработка формы
   //───────────────────────────────────────────────────────────────────────────
-  document.getElementById('req-form').addEventListener('submit', async (e) => {
+    document.getElementById('req-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const fileInput = document.getElementById('ts-file');
     const prompt    = document.getElementById('prompt').value.trim();
 
     if (!fileInput.files.length) return alert('Приложите файл ТЗ');
 
-    // //отображаем статус
-    setStatus('Загрузка файла…');
+   //──────────────────── 0. Проверяем и списываем 400 единиц
+   const uid = (await supabase.auth.getUser()).data.user.id;
+   const { data: newBalance, error: billErr } =
+         await supabase.rpc('charge_balance', { p_uid: uid, p_amount: 400 });
 
-    //──────────────────── 1. Загружаем файл в Storage
-    const file      = fileInput.files[0];
+   if (billErr) { alert(billErr.message); return; }
+   if (newBalance === null) {                // денег не хватило
+     alert('Недостаточно средств: необходимо 400 единиц баланса.');
+     return;
+   }
+   // показываем в UI, что баланс изменился
+   window.refreshBalance?.();
+
+
+  //──────────────────── 1. Загружаем файл в Storage
+     const file      = fileInput.files[0];
     const filename  = `${crypto.randomUUID()}_${file.name}`;
     const { data: uploadData, error: upErr } = await supabase
       .storage.from('user-uploads')
