@@ -64,7 +64,8 @@
      return;
    }
    // показываем в UI, что баланс изменился
-   window.refreshBalance?.();
+   import { refreshBalance } from './index.js';
+   refreshBalance();          // теперь функция точно существует
 
 
   //──────────────────── 1. Загружаем файл в Storage
@@ -124,6 +125,7 @@
       .from('service_requests')
       .select('id, created_at, prompt, response_path')
       .eq('service_no', 1)
+      .eq('user_id', (await supabase.auth.getUser()).data.user.id)
       .order('created_at', { ascending: false });
 
     if (error) return alert(error.message);
