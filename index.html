@@ -79,13 +79,31 @@
 
     /*── 3. Баланс ──────────────────────────────────────────────────────*/
     export async function refreshBalance() {
-      const uid = (await supabase.auth.getUser()).data.user.id;
-      const { data, error } = await supabase
-        .from('profiles').select('username, balance').eq('id', uid).single();
-      if (error) { console.error(error); return; }
-      document.getElementById('username').textContent =
-        `${data.username || 'Профиль'} | ₽${data.balance}`;
-    }
+     const uid = (await supabase.auth.getUser()).data.user.id;
+ 
+   /* .maybeSingle() → error == null даже если строк нет */
+   let { data, error } = await supabase
+     .from('profiles')
+     .select('username, balance')
+     .eq('id', uid)
+     .maybeSingle();
+ 
+   /* если записи нет – создаём «пустую» */
+   if (!data && !error) {
+     const ins = await supabase
+       .from('profiles')
+       .insert({ id: uid, username: null, balance: 0 })
+       .select('username, balance')
+       .single();
+     data  = ins.data;
+     error = ins.error;
+   }
+
+   if (error) { console.error(error); return; }
+ 
+   document.getElementById('username').textContent =
+     `${data?.username || 'Профиль'} | ₽${data?.balance ?? 0}`;
+ }
     window.refreshBalance = refreshBalance;
 
     /*── 4. Сессия ───────────────────────────────────────────────────────*/
