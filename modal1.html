@@ -5,8 +5,8 @@
   <form id="req-form" class="bg-white p-6 rounded shadow space-y-4">
     <textarea id="prompt-field" rows="4" class="w-full border p-3"
               placeholder="Введите запрос…"></textarea>
-    <input  id="ts-file" type="file"
-            accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt" required>
+    <input id="ts-file" type="file"
+           accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt" required>
     <button class="bg-blue-600 text-white px-4 py-2 rounded">Отправить</button>
   </form>
 
@@ -23,120 +23,110 @@
 </section>
 
 <script type="module">
-/* ── 0. клиент берём из window.sb ───────────────────────────────────────*/
-const supabase = window.sb;          // 👍  это уже «живой» клиент
-const BUCKET   = 'user-uploads';
+/* ─────────────────── 0. Клиент + bucket ──────────────────────────────*/
+const supabase = window.sb;
+const BUCKET   = 'user-uploads';   // ← Убедитесь, что имя точь‑в‑точь как в Dashboard
 
-/* ── 1. DOM‑кеш ─────────────────────────────────────────────────────────*/
-const form        = document.getElementById('req-form');
-const fileInput   = document.getElementById('ts-file');
-const promptInput = document.getElementById('prompt-field');
-const statusBox   = document.getElementById('status');
-const tbody       = document.querySelector('#history tbody');
+/* ─────────────────── 1. DOM ──────────────────────────────────────────*/
+const form   = document.getElementById('req-form');
+const fInput = document.getElementById('ts-file');
+const pInput = document.getElementById('prompt-field');
+const status = document.getElementById('status');
+const tbody  = document.querySelector('#history tbody');
 
-/* ── 2. submit‑listener ────────────────────────────────────────────────*/
-form.addEventListener('submit', handleSubmit);
-
-/* ── 3. при загрузке сразу историю ─────────────────────────────────────*/
+/* ─────────────────── 2. Listeners ───────────────────────────────────*/
+form.addEventListener('submit', onSubmit);
 loadHistory();
 
-/* ── 4. обработчик формы ───────────────────────────────────────────────*/
-async function handleSubmit(e) {
+/* ─────────────────── 3. Submit ──────────────────────────────────────*/
+async function onSubmit(e){
   e.preventDefault();
-  try {
-    if (!fileInput.files.length) { alert('Приложите файл ТЗ'); return; }
-
-    const file   = fileInput.files[0];
-    const prompt = promptInput.value.trim();
+  try{
+    if(!fInput.files.length){alert('Приложите файл ТЗ');return;}
+    const file   = fInput.files[0];
+    const prompt = pInput.value.trim();
     const uid    = (await supabase.auth.getUser()).data.user.id;
 
-    /* 4.1 списываем 400 */
-    const { data:newBal, error:billErr } =
-      await supabase.rpc('charge_balance', { p_uid:uid, p_amount:400 });
-    if (billErr) throw billErr;
-    if (newBal === null) { alert('Недостаточно средств'); return; }
+    /* 3.1 списываем 400 */
+    const {data:newBal,error:billErr}=await supabase
+      .rpc('charge_balance',{p_uid:uid,p_amount:400});
+    if(billErr) throw billErr;
+    if(newBal===null){alert('Недостаточно средств');return;}
     window.refreshBalance?.();
 
-    /* 4.2 upload файла */
-    const srcName = `${crypto.randomUUID()}_${file.name}`;
-    const { error:upErr } =
-      await supabase.storage.from('user-uploads').upload(srcName, file);
-    if (upErr) throw upErr;
+    /* 3.2 upload исходного файла */
+    const srcPath=`${uid}/${crypto.randomUUID()}_${file.name}`;
+    const up1=await supabase.storage.from(BUCKET)
+      .upload(srcPath,file,{contentType:file.type});
+    if(up1.error){throw up1.error;}
 
-    /* 4.3 INSERT history */
+    /* 3.3 запись в history */
     setStatus('Создание запроса…');
-    const { data:reqRow, error:insErr } = await supabase
-      .from('service_requests')
-      .insert({ user_id:uid, service_no:1, prompt, file_path:srcName })
+    const ins=await supabase.from('service_requests')
+      .insert({user_id:uid,service_no:1,prompt,file_path:srcPath})
       .select('*').single();
-    if (insErr) throw insErr;
+    if(ins.error) throw ins.error;
+    const reqRow=ins.data;
 
-    /* 4.4 GPT */
+    /* 3.4 GPT */
     setStatus('GPT обрабатывает…');
-    let snippet = ''; try { snippet = (await file.text()).slice(0,12000);}catch{}
-    const gptBody = {
+    let snippet='';try{snippet=(await file.text()).slice(0,12000);}catch{}
+    const body={
       model:'gpt-4o-mini',
       messages:[
-        { role:'system',
-          content:'Ты инженер‑сметчик. Составь CSV‑таблицу оборудования.'},
-        { role:'user',
-          content:`Запрос: «${prompt}»\n\nФайл:\n${snippet}` }
-      ]
-    };
-    const gpt = await fetch('https://api.openai.com/v1/chat/completions', {
+        {role:'system',content:'Ты инженер‑сметчик. Составь CSV‑таблицу оборудования.'},
+        {role:'user',content:`Запрос: «${prompt}»\n\nФайл:\n${snippet}`}
+      ]};
+    const gpt=await fetch('https://api.openai.com/v1/chat/completions',{
       method:'POST',
-      headers:{ 'Content-Type':'application/json',
-                'Authorization':`Bearer ${window.OPENAI_KEY}` },
-      body:JSON.stringify(gptBody)
-    });
-    if (!gpt.ok) throw new Error('OpenAI ' + gpt.status);
-    const csv = (await gpt.json()).choices?.[0]?.message?.content || '';
+      headers:{'Content-Type':'application/json',
+               'Authorization':`Bearer ${window.OPENAI_KEY}`},
+      body:JSON.stringify(body)});
+    if(!gpt.ok) throw new Error('OpenAI '+gpt.status);
+    const csv=(await gpt.json()).choices?.[0]?.message?.content||'';
 
-    /* 4.5 upload CSV */
-    const resName = `${reqRow.id}.csv`;
-    await supabase.storage.from('user-uploads')
-      .upload(resName, new Blob([csv],{ type:'text/csv' }), { upsert:true });
+    /* 3.5 upload CSV‑ответа */
+    const resPath=`${uid}/${reqRow.id}.csv`;
+    const up2=await supabase.storage.from(BUCKET)
+      .upload(resPath,new Blob([csv],{type:'text/csv'}),{upsert:true});
+    if(up2.error) throw up2.error;
 
-    /* 4.6 UPDATE history */
+    /* 3.6 UPDATE history */
     await supabase.from('service_requests')
-      .update({ response_path:resName, status:'done' })
-      .eq('id', reqRow.id);
+      .update({response_path:resPath,status:'done'})
+      .eq('id',reqRow.id);
 
     setStatus('Готово ✅');
     loadHistory();
     form.reset();
-  } catch (err) {
+  }catch(err){
     console.error(err);
-    setStatus('Ошибка: ' + (err.message || err));
+    setStatus('Ошибка: '+(err.message||err));
   }
 }
 
-/* ── 5. история ────────────────────────────────────────────────────────*/
-async function loadHistory() {
-  tbody.innerHTML = '';
-  const uid = (await supabase.auth.getUser()).data.user.id;
-  const { data } = await supabase
-    .from('service_requests')
-    .select('*')
-    .eq('user_id', uid)
-    .eq('service_no', 1)
-    .order('created_at',{ ascending:false });
-
-  data.forEach(r => {
-    const url = r.response_path
-      ? supabase.storage.from('user-uploads').getPublicUrl(r.response_path).data.publicUrl
+/* ─────────────────── 4. История ──────────────────────────────────────*/
+async function loadHistory(){
+  tbody.innerHTML='';
+  const uid=(await supabase.auth.getUser()).data.user.id;
+  const {data}=await supabase.from('service_requests')
+    .select('*').eq('user_id',uid).eq('service_no',1)
+    .order('created_at',{ascending:false});
+  data.forEach(r=>{
+    const url=r.response_path
+      ? supabase.storage.from(BUCKET).getPublicUrl(r.response_path).data.publicUrl
       : null;
-    tbody.insertAdjacentHTML('beforeend', `
+    tbody.insertAdjacentHTML('beforeend',`
       <tr>
         <td class="border-t p-2">${new Date(r.created_at).toLocaleString()}</td>
         <td class="border-t p-2">${r.prompt.slice(0,60)}…</td>
-        <td class="border-t p-2">
-          ${url ? `<a href="${url}" target="_blank" class="underline text-blue-600">скачать</a>` : '—'}
-        </td>
+        <td class="border-t p-2">${url
+          ? `<a href="${url}" target="_blank" class="underline text-blue-600">скачать</a>`
+          : '—'}</td>
       </tr>`);
   });
 }
 
-/* ── 6. helper ─────────────────────────────────────────────────────────*/
-function setStatus(t){ statusBox.textContent = t; statusBox.classList.remove('hidden'); }
+/* ─────────────────── 5. helper ───────────────────────────────────────*/
+function setStatus(t){status.textContent=t;status.classList.remove('hidden');}
 </script>
