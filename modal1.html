@@ -70,22 +70,16 @@ async function onSubmit(e){
     const reqRow=ins.data;
 
     /* 3.4 GPT */
-    setStatus('GPT обрабатывает…');
-    let snippet='';try{snippet=(await file.text()).slice(0,12000);}catch{}
-    const body={
-      model:'gpt-4o-mini',
-      messages:[
-        {role:'system',content:'Ты инженер‑сметчик. Составь CSV‑таблицу оборудования.'},
-        {role:'user',content:`Запрос: «${prompt}»\n\nФайл:\n${snippet}`}
-      ]};
-    const gpt=await fetch('https://api.openai.com/v1/chat/completions',{
-      method:'POST',
-      headers:{'Content-Type':'application/json',
-               'Authorization':`Bearer ${window.OPENAI_KEY}`},
-      body:JSON.stringify(body)});
-    if(!gpt.ok) throw new Error('OpenAI '+gpt.status);
-    const csv=(await gpt.json()).choices?.[0]?.message?.content||'';
+    +setStatus('GPT обрабатывает…');
+ let snippet=''; try { snippet=(await file.text()).slice(0,12000); } catch {}
 
+const { data:funcRes, error:funcErr } = await supabase.functions.invoke(
+  'equip-selector',
+  { body: { prompt, snippet } }
+);
+if (funcErr) throw funcErr;
+const csv = funcRes.csv || '';
+  
     /* 3.5 upload CSV‑ответа */
     const resPath=`${uid}/${reqRow.id}.csv`;
     const up2=await supabase.storage.from(BUCKET)
