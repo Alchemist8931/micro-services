@@ -121,7 +121,8 @@
 
     /*–– auth flow ––*/
     async function startApp(){
-      dlgAuth.close();            // скрываем диалог
+      dlgAuth.close();
+      dlgAuth.remove();
       sidebar.hidden = false;
       userBox.hidden = false;
       await refreshBalance();
