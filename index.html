@@ -98,6 +98,16 @@
     const userBox = document.getElementById('user-info');
     const usernameLbl = document.getElementById('username');
 
+    const liEmail    = document.getElementById('li-email');
+    const liPass     = document.getElementById('li-pass');
+
+    const suEmail    = document.getElementById('su-email');
+    const suPass     = document.getElementById('su-pass');
+    const suName     = document.getElementById('su-name');
+    const logoutBtn  = document.getElementById('logout-btn');
+    const signupForm = document.getElementById('signup-form');
+    const loginForm  = document.getElementById('login-form');
+
     /*–– helpers ––*/
     export async function refreshBalance() {
       const uid = (await supabase.auth.getUser()).data.user.id;
