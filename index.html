@@ -86,6 +86,15 @@ const topNav    = document.getElementById('top-nav');
 const userBox   = document.getElementById('user-info');
 const usernameL = document.getElementById('username');
 
+/* формы  — кэшируем ДО навешивания listener‑ов */
+const signupForm = document.getElementById('signup-form');
+const loginForm  = document.getElementById('login-form');
+const suEmail    = document.getElementById('su-email');
+const suPass     = document.getElementById('su-pass');
+const suName     = document.getElementById('su-name');
+const liEmail    = document.getElementById('li-email');
+const liPass     = document.getElementById('li-pass');
+
 /*–– helpers ––*/
 export async function refreshBalance(){
   const uid = (await supabase.auth.getUser()).data.user.id;
