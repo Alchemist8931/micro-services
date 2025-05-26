@@ -54,10 +54,12 @@ async function onSubmit(e){
     window.refreshBalance?.();
 
     /* 3.2 upload исходного файла */
-    const srcPath=`${uid}/${crypto.randomUUID()}_${file.name}`;
-    const up1=await supabase.storage.from(BUCKET)
-      .upload(srcPath,file,{contentType:file.type});
-    if(up1.error){throw up1.error;}
+    const sanitize = str => str.normalize('NFKD').replace(/[^\w.\-]/g,'_');
+    const srcPath  = `${uid}/${crypto.randomUUID()}_${sanitize(file.name)}`;
+
+    const up1 = await supabase
+  .storage.from(BUCKET)
+  .upload(srcPath, file, { contentType: file.type });
 
     /* 3.3 запись в history */
     setStatus('Создание запроса…');
