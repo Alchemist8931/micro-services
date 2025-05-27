@@ -7,8 +7,8 @@
   <title>Подбор оборудования</title>
 
   <!-- Supabase + TUS -->
-  <script src="https://unpkg.com/@supabase/supabase-js@2.38.5/dist/umd/supabase.min.js"></script>
-  <script src="https://unpkg.com/tus-js-client@3.1.0/dist/tus.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
+  <script src="https://unpkg.com/tus-js-client@3.1.0/dist/tus.min.js" defer></script>
 
   <style>
     /* базовые стили */
@@ -142,7 +142,7 @@ function handleFile(file){
       }
 
       /* 4. вызвать Edge‑Function */
-      fetch("https://nnelvjvcxqugsevbykfn.functions.supabase.co/generate_csv", { // !!
+      fetch("https://nnelvjvcxqugsevbykfn.supabase.co/functions/v1/generate_csv", { // !!
         method:"POST",
         headers:{ "Content-Type":"application/json" },
         body:JSON.stringify({ request_id:row.id })
