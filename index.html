@@ -2,160 +2,192 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Подбор оборудования</title>
+  <!-- Подключаем supabase-js из CDN -->
+  <script src="https://unpkg.com/@supabase/supabase-js@2.38.5/dist/umd/supabase.min.js"></script>
   <style>
-    body { font-family: Arial, sans-serif; margin: 2rem; }
-    h1, h2 { color: #333; }
-    input, button { font-size: 1rem; }
-    button { margin-left: 0.5rem; padding: 0.5rem 1rem; }
-    table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
-    th, td { border: 1px solid #ccc; padding: 0.5rem; text-align: left; }
-    th { background: #f0f0f0; }
-    a { color: #0066cc; text-decoration: none; }
-    a:hover { text-decoration: underline; }
-    
+    /* === БАЗОВЫЕ СТИЛИ страницы === */
+    *, *::before, *::after { box-sizing: border-box; }
+    body {
+      margin: 0; font-family: "Inter", Arial, sans-serif;
+      background: #f5f5f5; display: flex; justify-content: center;
+      min-height: 100vh; padding: 2rem;
+    }
+    /* === Карточка загрузки === */
+    .uploader {
+      width: 420px; background: #fff; border-radius: 24px; padding: 32px;
+      box-shadow: 0 4px 24px rgba(0,0,0,.08);
+    }
+    .dropzone {
+      border: 2px dashed #d9d9d9; border-radius: 16px;
+      padding: 48px 24px; text-align: center; cursor: pointer;
+      transition: background .2s;
+    }
+    .dropzone.dragover { background: #fafafa; }
+    .dropzone svg { width: 48px; height: 48px; color: #8c8c8c; }
+    .dropzone p { margin: 12px 0 0; font-size: 14px; color: #8c8c8c; }
+    /* === Список файлов === */
+    .files { margin-top: 24px; }
+    .file-item {
+      display: flex; align-items: center; justify-content: space-between;
+      border: 1px solid #eee; border-radius: 12px; padding: 12px 16px;
+      margin-bottom: 12px;
+    }
+    .file-item span { font-size: 14px; color: #333; }
+    /* === Кнопка отправки === */
+    .send-btn {
+      width: 100%; padding: 14px; margin-top: 8px;
+      border: none; border-radius: 12px; background: #000; color: #fff;
+      font-size: 16px; font-weight: 600; cursor: pointer;
+      transition: opacity .2s;
+    }
+    .send-btn:disabled { opacity: .4; cursor: not-allowed; }
+    /* === История запросов === */
+    .history { margin-top: 40px; }
+    .history h2 { font-size: 16px; margin: 0 0 12px; color: #333; }
+    .history-item {
+      border-bottom: 1px solid #eee; padding: 8px 0;
+      font-size: 13px; line-height: 1.4;
+    }
+    .history-item a { color: #0066cc; text-decoration: none; }
   </style>
 </head>
 <body>
-  <h1>Подбор оборудования по ТЗ</h1>
+  <div class="uploader">
+    <!-- //зона перетаскивания файла -->
+    <div id="dropzone" class="dropzone">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+           stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="16 16 12 12 8 16"></polyline>
+        <line x1="12" y1="12" x2="12" y2="21"></line>
+        <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"></path>
+        <polyline points="16 16 12 12 8 16"></polyline>
+      </svg>
+      <p>Перетащите файл сюда или нажмите<br><small>максимум 1 ГБ</small></p>
+      <input id="file-input" type="file" hidden />
+    </div>
 
-  <div>
-    <input type="file" id="fileInput" />
-    <button id="uploadBtn">Отправить на подбор оборудования</button>
+    <!-- //список файлов -->
+    <div id="files" class="files"></div>
+
+    <!-- //кнопка отправки на GPT -->
+    <button id="send-btn" class="send-btn" disabled>Отправить на подбор оборудования</button>
+
+    <!-- //история запросов -->
+    <div class="history">
+      <h2>История</h2>
+      <div id="history-list"></div>
+    </div>
   </div>
 
-  <h2>История запросов</h2>
-  <table id="historyTable">
-    <thead>
-      <tr>
-        <th>Дата</th>
-        <th>Файл ТЗ</th>
-        <th>Статус</th>
-        <th>Ответ</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table>
+  <script>
+    // *** Настройка Supabase ***
+    // TODO: замените на свои значения
+    const supabaseUrl = 'https://nnelvjvcxqugsevbykfn.supabase.co';
+    const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5uZWx2anZjeHF1Z3NldmJ5a2ZuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgzNzI1NzcsImV4cCI6MjA2Mzk0ODU3N30.hTaareGOoQ4Mp9ft3HfNmktqSGb9l2Ie4TGyE1X-ibI';
+    const supabase = supabase.createClient(supabaseUrl, supabaseKey);
 
-  <script type="module">
-    import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
+    // *** Переменные UI ***
+    const dropzone = document.getElementById('dropzone');
+    const fileInput = document.getElementById('file-input');
+    const filesContainer = document.getElementById('files');
+    const sendBtn = document.getElementById('send-btn');
+    let selectedFile = null;  // //текущий файл для отправки
 
-    // ✅ Замените на ваши реальные значения
-    const SUPABASE_URL       = 'https://uuzsujqizwkqhwijrszr.supabase.co';
-    const SUPABASE_ANON_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV1enN1anFpendrcWh3aWpyc3pyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDc5OTkzMDMsImV4cCI6MjA2MzU3NTMwM30.g9OD47l7kTVvK628mffBNwcX6gZXMiM8MoAK5uq0gBo';
-    const FUNCTIONS_URL      = 'https://uuzsujqizwkqhwijrszr.functions.supabase.co/equipment-selection';
+    // === Drag & Drop ===
+    dropzone.addEventListener('click', () => fileInput.click());
+    ['dragenter','dragover'].forEach(evt =>
+      dropzone.addEventListener(evt, e => { e.preventDefault(); dropzone.classList.add('dragover'); })
+    );
+    ['dragleave','drop'].forEach(evt =>
+      dropzone.addEventListener(evt, e => { e.preventDefault(); dropzone.classList.remove('dragover'); })
+    );
+    dropzone.addEventListener('drop', e => {
+      if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+    });
+    fileInput.addEventListener('change', e => handleFile(e.target.files[0]));
 
-    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-    // ←– Вставляем сюда авторизацию
-  // при старте приложения спросим email и отправим magic link
-  const { data: authData, error: authError } = await supabase.auth.signInWithOtp({
-    email: prompt('Введите e‑mail для входа')
-  });
-  if (authError) {
-    console.error('Ошибка входа:', authError.message);
-    alert('Не удалось отправить ссылку для входа: ' + authError.message);
-    // можно при желании прервать дальнейший код
-  }
-    
-const fileInput = document.getElementById('fileInput');
-  const uploadBtn = document.getElementById('uploadBtn');
-  const tbody     = document.querySelector('#historyTable tbody');
-
-  // ——— Функция для «очистки» имени файла ———
-  function sanitizeFileName(name) {
-    return name
-      .normalize('NFKD')               // разложение Unicode
-      .replace(/[\u0300-\u036f]/g, '') // удаляем диакритику
-      .replace(/[^a-zA-Z0-9._-]/g, '_'); // оставляем только ASCII, цифры, . _ -
-  }
-
-  // ——— Загрузка истории запросов ———
-  async function loadRequests() {
-    tbody.innerHTML = '';
-    const { data, error } = await supabase
-      .from('requests')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      console.error('Ошибка при загрузке истории:', error);
-      return;
+    // //функция выбора файла
+    function handleFile(file) {
+      selectedFile = file;
+      filesContainer.innerHTML = `
+        <div class="file-item">
+          <span>${file.name} (${Math.round(file.size/1024/1024)} MB)</span>
+        </div>`;
+      sendBtn.disabled = false;
     }
 
-    for (const r of data) {
-      const tr = document.createElement('tr');
+    // === Отправка файла ===
+    sendBtn.addEventListener('click', async () => {
+      if (!selectedFile) return;
+      sendBtn.disabled = true;
+      const path = `${Date.now()}_${selectedFile.name}`;
 
-      // Дата
-      tr.innerHTML = `
-        <td>${new Date(r.created_at).toLocaleString()}</td>
-        <td>${r.file_path}</td>
-        <td>${r.status}</td>
-        <td>${r.response_path 
-             ? `<a href="${supabase
-                 .storage
-                 .from('responses')
-                 .getPublicUrl(r.response_path)
-                 .publicURL}" target="_blank">Скачать CSV</a>`
-             : '—'}
-        </td>`;
-      tbody.appendChild(tr);
-    }
-  }
+      // //загрузка в Storage
+      const { error: uploadErr } = await supabase
+        .storage.from('specs')
+        .upload(path, selectedFile, { upsert: false });
 
-  // ——— Загрузка файла и отправка в Edge Function ———
-  async function uploadAndSend() {
-    const file = fileInput.files[0];
-    if (!file) {
-      alert('Пожалуйста, выберите файл ТЗ.');
-      return;
-    }
+      if (uploadErr) {
+        alert('Ошибка загрузки: ' + uploadErr.message);
+        sendBtn.disabled = false;
+        return;
+      }
 
-    // 1) Формируем безопасный путь
-    const cleanName = sanitizeFileName(file.name);
-    const filePath  = `${Date.now()}_${cleanName}`;
+      // //получаем публичную ссылку (если bucket приватный — используем signed URL)
+      const { data: { publicUrl } } = supabase
+        .storage.from('specs')
+        .getPublicUrl(path);
 
-    // 2) Загружаем в бакет spec-files
-    const { error: uploadError } = await supabase
-      .storage
-      .from('spec-files')
-      .upload(filePath, file);
-    if (uploadError) {
-      alert('Ошибка загрузки файла: ' + uploadError.message);
-      return;
-    }
+      // //добавляем запись в таблицу
+      const { data: row, error: insertErr } = await supabase
+        .from('requests')
+        .insert({ filename: selectedFile.name, spec_url: publicUrl })
+        .select()
+        .single();
 
-    // 3) Создаём запись в БД
-     const { data: reqData, error: insertError } = await supabase
-  .from('requests')
-  .insert({ file_path: filePath })
-  .select()
-  .single();
+      if (insertErr) {
+        alert('DB ошибка: ' + insertErr.message);
+        sendBtn.disabled = false;
+        return;
+      }
 
-    if (insertError) {
-      alert('Ошибка при создании записи: ' + insertError.message);
-      return;
-    }
-
-    // 4) Вызываем Edge Function для обработки
-    try {
-      const res = await fetch(FUNCTIONS_URL, {
+      // //вызываем Edge Function
+      fetch('https://YOUR-PROJECT.functions.supabase.co/generate_csv', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ request_id: reqData.id })
+        body: JSON.stringify({ request_id: row.id })
       });
-      if (!res.ok) throw new Error('Ошибка сервиса');
-    } catch (err) {
-      console.error('Edge Function error:', err);
+
+      // //очистка UI
+      selectedFile = null;
+      filesContainer.innerHTML = '';
+      sendBtn.disabled = true;
+    });
+
+    // === Рендер истории (live) ===
+    async function loadHistory() {
+      const { data, error } = await supabase
+        .from('requests')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) return;
+
+      document.getElementById('history-list').innerHTML = data.map(r => `
+        <div class="history-item">
+          <strong>${new Date(r.created_at).toLocaleString()}</strong><br>
+          <a href="${r.spec_url}" target="_blank">Запрос: ${r.filename}</a><br>
+          ${r.csv_url ? `<a href="${r.csv_url}" target="_blank">Ответ CSV</a>` : '⏳ обработка'}
+        </div>
+      `).join('');
     }
-
-    // 5) Обновляем таблицу истории
-    await loadRequests();
-  }
-
-  uploadBtn.addEventListener('click', uploadAndSend);
-
-  // Подгружаем историю при стартe
-  loadRequests();
-</script>
+    // //начальная загрузка + подписка
+    loadHistory();
+    supabase.channel('table-db-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'requests' }, loadHistory)
+      .subscribe();
+  </script>
+</body>
+</html>
