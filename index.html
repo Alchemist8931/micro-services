@@ -48,6 +48,17 @@
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+    // ←– Вставляем сюда авторизацию
+  // при старте приложения спросим email и отправим magic link
+  const { data: authData, error: authError } = await supabase.auth.signInWithOtp({
+    email: prompt('Введите e‑mail для входа')
+  });
+  if (authError) {
+    console.error('Ошибка входа:', authError.message);
+    alert('Не удалось отправить ссылку для входа: ' + authError.message);
+    // можно при желании прервать дальнейший код
+  }
+    
 const fileInput = document.getElementById('fileInput');
   const uploadBtn = document.getElementById('uploadBtn');
   const tbody     = document.querySelector('#historyTable tbody');
