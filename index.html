@@ -1,81 +1,66 @@
+
 <!DOCTYPE html>
 <html lang="ru">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Подбор оборудования</title>
-  <!-- Подключаем supabase-js из CDN -->
+
+  <!-- Supabase + TUS -->
   <script src="https://unpkg.com/@supabase/supabase-js@2.38.5/dist/umd/supabase.min.js"></script>
   <script src="https://unpkg.com/tus-js-client@3.1.0/dist/tus.min.js"></script>
+
   <style>
-    /* === БАЗОВЫЕ СТИЛИ страницы === */
-    *, *::before, *::after { box-sizing: border-box; }
-    body {
-      margin: 0; font-family: "Inter", Arial, sans-serif;
-      background: #f5f5f5; display: flex; justify-content: center;
-      min-height: 100vh; padding: 2rem;
-    }
-    /* === Карточка загрузки === */
-    .uploader {
-      width: 820px; background: #fff; border-radius: 24px; padding: 32px;
-      box-shadow: 0 4px 24px rgba(0,0,0,.08);
-    }
-    .dropzone {
-      border: 2px dashed #d9d9d9; border-radius: 16px;
-      padding: 48px 24px; text-align: center; cursor: pointer;
-      transition: background .2s;
-    }
-    .dropzone.dragover { background: #fafafa; }
-    .dropzone svg { width: 48px; height: 48px; color: #8c8c8c; }
-    .dropzone p { margin: 12px 0 0; font-size: 14px; color: #8c8c8c; }
-    /* === Список файлов === */
-    .files { margin-top: 24px; }
-    .file-item {
-      display: flex; align-items: center; justify-content: space-between;
-      border: 1px solid #eee; border-radius: 12px; padding: 12px 16px;
-      margin-bottom: 12px;
-    }
-    .file-item span { font-size: 14px; color: #333; }
-    /* === Кнопка отправки === */
-    .send-btn {
-      width: 100%; padding: 14px; margin-top: 8px;
-      border: none; border-radius: 12px; background: #000; color: #fff;
-      font-size: 16px; font-weight: 600; cursor: pointer;
-      transition: opacity .2s;
-    }
-    .send-btn:disabled { opacity: .4; cursor: not-allowed; }
-    /* === История запросов === */
-    .history { margin-top: 40px; }
-    .history h2 { font-size: 16px; margin: 0 0 12px; color: #333; }
-    .history-item {
-      border-bottom: 1px solid #eee; padding: 8px 0;
-      font-size: 13px; line-height: 1.4;
-    }
-    .history-item a { color: #0066cc; text-decoration: none; }
+    /* базовые стили */
+    *, *::before, *::after { box-sizing:border-box }
+    body{margin:0;font-family:Inter,Arial,sans-serif;background:#f5f5f5;
+         display:flex;justify-content:center;min-height:100vh;padding:2rem}
+    .uploader{width:820px;background:#fff;border-radius:24px;padding:32px;
+              box-shadow:0 4px 24px rgba(0,0,0,.08)}
+    /* drop‑zone */
+    .dropzone{border:2px dashed #d9d9d9;border-radius:16px;padding:48px 24px;
+              text-align:center;cursor:pointer;transition:background .2s;display:block}
+    .dropzone.dragover{background:#fafafa}
+    .dropzone svg{width:48px;height:48px;color:#8c8c8c}
+    .dropzone p{margin:12px 0 0;font-size:14px;color:#8c8c8c}
+    /* список */
+    .files{margin-top:24px}
+    .file-item{display:flex;align-items:center;justify-content:space-between;
+               border:1px solid #eee;border-radius:12px;padding:12px 16px;margin-bottom:12px}
+    .file-item span{font-size:14px;color:#333}
+    /* кнопка */
+    .send-btn{width:100%;padding:14px;margin-top:8px;border:none;border-radius:12px;
+              background:#000;color:#fff;font-size:16px;font-weight:600;cursor:pointer;
+              transition:opacity .2s}
+    .send-btn:disabled{opacity:.4;cursor:not-allowed}
+    /* история */
+    .history{margin-top:40px}
+    .history h2{font-size:16px;margin:0 0 12px;color:#333}
+    .history-item{border-bottom:1px solid #eee;padding:8px 0;font-size:13px;line-height:1.4}
+    .history-item a{color:#0066cc;text-decoration:none}
   </style>
 </head>
 <body>
   <div class="uploader">
-    <!-- //зона перетаскивания файла -->
-    <div id="dropzone" class="dropzone">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
-           stroke-linecap="round" stroke-linejoin="round">
+
+    <!-- label делает всю зону кликабельной -->
+    <label id="dropzone" class="dropzone" for="file-input">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
         <polyline points="16 16 12 12 8 16"></polyline>
         <line x1="12" y1="12" x2="12" y2="21"></line>
         <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"></path>
         <polyline points="16 16 12 12 8 16"></polyline>
       </svg>
       <p>Перетащите файл сюда или нажмите<br><small>максимум 1 ГБ</small></p>
-      <input id="file-input" type="file" hidden />
-    </div>
+    </label>
+    <!-- реальный input -->
+    <input id="file-input" type="file" accept=".pdf,.doc,.docx,.txt,.xlsx,.zip"
+           style="display:none" />
 
-    <!-- //список файлов -->
     <div id="files" class="files"></div>
-
-    <!-- //кнопка отправки на GPT -->
     <button id="send-btn" class="send-btn" disabled>Отправить на подбор оборудования</button>
 
-    <!-- //история запросов -->
     <div class="history">
       <h2>История</h2>
       <div id="history-list"></div>
@@ -83,111 +68,108 @@
   </div>
 
   <script>
-    // *** Настройка Supabase ***
-    // TODO: замените на свои значения
+    /* ---------- Supabase init ---------- */
     const supabaseUrl = 'https://nnelvjvcxqugsevbykfn.supabase.co';
     const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5uZWx2anZjeHF1Z3NldmJ5a2ZuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgzNzI1NzcsImV4cCI6MjA2Mzk0ODU3N30.hTaareGOoQ4Mp9ft3HfNmktqSGb9l2Ie4TGyE1X-ibI';
     const supabase = supabase.createClient(supabaseUrl, supabaseKey);
 
-    // *** Переменные UI ***
-    const dropzone = document.getElementById('dropzone');
-    const fileInput = document.getElementById('file-input');
-    const filesContainer = document.getElementById('files');
-    const sendBtn = document.getElementById('send-btn');
-    let selectedFile = null;  // //текущий файл для отправки
+    /* ---------- UI refs ---------- */
+    const dropzone = document.getElementById("dropzone");
+    const fileInput = document.getElementById("file-input");
+    const filesContainer = document.getElementById("files");
+    const sendBtn = document.getElementById("send-btn");
+    let selectedFile = null;
 
-    // === Drag & Drop ===
-    dropzone.addEventListener('click', () => fileInput.click());
-    ['dragenter','dragover'].forEach(evt =>
-      dropzone.addEventListener(evt, e => { e.preventDefault(); dropzone.classList.add('dragover'); })
+    /* ---------- Drag‑n‑Drop helpers ---------- */
+    ["dragenter","dragover"].forEach(e =>
+      dropzone.addEventListener(e, ev => { ev.preventDefault(); dropzone.classList.add("dragover") })
     );
-    ['dragleave','drop'].forEach(evt =>
-      dropzone.addEventListener(evt, e => { e.preventDefault(); dropzone.classList.remove('dragover'); })
+    ["dragleave","drop"].forEach(e =>
+      dropzone.addEventListener(e, ev => { ev.preventDefault(); dropzone.classList.remove("dragover") })
     );
-    dropzone.addEventListener('drop', e => {
-      if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+    dropzone.addEventListener("drop", ev => {
+      if (ev.dataTransfer.files.length) handleFile(ev.dataTransfer.files[0]);
     });
-    fileInput.addEventListener('change', e => handleFile(e.target.files[0]));
+    fileInput.addEventListener("change", e => handleFile(e.target.files[0]));
 
-    // //функция выбора файла
-    function handleFile(file) {
+    function handleFile(file){
       selectedFile = file;
       filesContainer.innerHTML = `
         <div class="file-item">
-          <span>${file.name} (${Math.round(file.size/1024/1024)} MB)</span>
+          <span>${file.name} (${(file.size/1048576).toFixed(1)} MB)</span>
         </div>`;
       sendBtn.disabled = false;
     }
 
-    // === Отправка файла ===
-    sendBtn.addEventListener('click', async () => {
+    /* ---------- Upload to Storage + create DB row ---------- */
+    sendBtn.addEventListener("click", async () => {
       if (!selectedFile) return;
       sendBtn.disabled = true;
-      const path = `${Date.now()}_${selectedFile.name}`;
+      const path = `${Date.now()}_${selectedFile.name}`.replace(/\s+/g,"_");
 
-      // //загрузка в Storage
+      /* 1. upload (резюмируемый) */
       const { error: uploadErr } = await supabase
-        .storage.from('specs')
-        .upload(path, selectedFile, { upsert: false });
+        .storage.from("specs")
+        .upload(path, selectedFile,
+          { upsert:false, resumable:true,
+            contentType:selectedFile.type, cacheControl:"3600" });
 
-      if (uploadErr) {
-        alert('Ошибка загрузки: ' + uploadErr.message);
-        sendBtn.disabled = false;
-        return;
+      if (uploadErr){
+        alert("Ошибка загрузки: "+uploadErr.message);
+        sendBtn.disabled = false; return;
       }
 
-      // //получаем публичную ссылку (если bucket приватный — используем signed URL)
-      const { data: { publicUrl } } = supabase
-        .storage.from('specs')
-        .getPublicUrl(path);
+      /* 2. публичная ссылка (для приватного bucket можно signedUrl) */
+      const { data:{ publicUrl } } = supabase
+        .storage.from("specs").getPublicUrl(path);
 
-      // //добавляем запись в таблицу
-      const { data: row, error: insertErr } = await supabase
-        .from('requests')
-        .insert({ filename: selectedFile.name, spec_url: publicUrl })
-        .select()
-        .single();
+      /* 3. insert row */
+      const { data: row, error: insErr } = await supabase
+        .from("requests")
+        .insert({ filename:selectedFile.name, spec_url:publicUrl })
+        .select().single();
 
-      if (insertErr) {
-        alert('DB ошибка: ' + insertErr.message);
-        sendBtn.disabled = false;
-        return;
+      if (insErr){
+        alert("DB ошибка: "+insErr.message);
+        sendBtn.disabled = false; return;
       }
 
-      // //вызываем Edge Function
-      fetch('https://YOUR-PROJECT.functions.supabase.co/generate_csv', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ request_id: row.id })
+      /* 4. вызвать Edge‑Function */
+      fetch("https://nnelvjvcxqugsevbykfn.functions.supabase.co/generate_csv", { // !!
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body:JSON.stringify({ request_id:row.id })
       });
 
-      // //очистка UI
+      /* 5. очистить форму */
       selectedFile = null;
-      filesContainer.innerHTML = '';
+      filesContainer.innerHTML = "";
       sendBtn.disabled = true;
     });
 
-    // === Рендер истории (live) ===
-    async function loadHistory() {
+    /* ---------- История (live) ---------- */
+    async function loadHistory(){
       const { data, error } = await supabase
-        .from('requests')
-        .select('*')
-        .order('created_at', { ascending: false });
-
+        .from("requests")
+        .select("*").order("created_at",{ascending:false});
       if (error) return;
 
-      document.getElementById('history-list').innerHTML = data.map(r => `
+      document.getElementById("history-list").innerHTML = data.map(r=>`
         <div class="history-item">
           <strong>${new Date(r.created_at).toLocaleString()}</strong><br>
           <a href="${r.spec_url}" target="_blank">Запрос: ${r.filename}</a><br>
-          ${r.csv_url ? `<a href="${r.csv_url}" target="_blank">Ответ CSV</a>` : '⏳ обработка'}
+          ${r.csv_url ?
+             `<a href="${r.csv_url}" target="_blank">Ответ CSV</a>` :
+             "⏳ обработка"}
         </div>
-      `).join('');
+      `).join("");
     }
-    // //начальная загрузка + подписка
     loadHistory();
-    supabase.channel('table-db-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'requests' }, loadHistory)
+
+    supabase.channel("requests-watch")
+      .on("postgres_changes",
+          { event:"*", schema:"public", table:"requests" },
+          loadHistory)
       .subscribe();
   </script>
 </body>
