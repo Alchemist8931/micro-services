@@ -77,14 +77,14 @@
     /* ---------- Supabase init ---------- */
     const supabaseUrl = 'https://nnelvjvcxqugsevbykfn.supabase.co';
     const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5uZWx2anZjeHF1Z3NldmJ5a2ZuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgzNzI1NzcsImV4cCI6MjA2Mzk0ODU3N30.hTaareGOoQ4Mp9ft3HfNmktqSGb9l2Ie4TGyE1X-ibI';
-    const supabase = supabase.createClient(supabaseUrl, supabaseKey);
+    const sb = supabase.createClient(supabaseUrl, supabaseKey);       // ✔  sb, не supabase
 
-    /* ---------- UI refs ---------- */
-    const dropzone = document.getElementById("dropzone");
-    const fileInput = document.getElementById("file-input");
-    const filesContainer = document.getElementById("files");
-    const sendBtn = document.getElementById("send-btn");
-    let selectedFile = null;
+  /* ---------- UI refs ---------- */
+  const dropzone       = document.getElementById("dropzone");
+  const fileInput      = document.getElementById("file-input");
+  const filesContainer = document.getElementById("files");
+  const sendBtn        = document.getElementById("send-btn");
+  let   selectedFile   = null;
 
     /* ---------- Drag‑n‑Drop helpers ---------- */
     ["dragenter","dragover"].forEach(e =>
@@ -108,76 +108,70 @@ function handleFile(file){
   sendBtn.disabled = false;          // ← теперь точно сработает
 }
 
-    /* ---------- Upload to Storage + create DB row ---------- */
-    sendBtn.addEventListener("click", async () => {
-      if (!selectedFile) return;
-      sendBtn.disabled = true;
-      const path = `${Date.now()}_${selectedFile.name}`.replace(/\s+/g,"_");
+     /* ---------- Upload to Storage + create DB row ---------- */
+  sendBtn.addEventListener("click", async () => {
+    if (!selectedFile) return;
+    sendBtn.disabled = true;
+    const path = `${Date.now()}_${selectedFile.name}`.replace(/\s+/g,"_");
 
-      /* 1. upload (резюмируемый) */
-      const { error: uploadErr } = await supabase
-        .storage.from("specs")
-        .upload(path, selectedFile,
-          { upsert:false, resumable:true,
-            contentType:selectedFile.type, cacheControl:"3600" });
+    /* 1. upload */
+    const { error: uploadErr } = await sb.storage.from("specs")
+      .upload(path, selectedFile,
+        { upsert:false, resumable:true,
+          contentType:selectedFile.type, cacheControl:"3600" });
 
-      if (uploadErr){
-        alert("Ошибка загрузки: "+uploadErr.message);
-        sendBtn.disabled = false; return;
-      }
+    if (uploadErr){
+      alert("Ошибка загрузки: "+uploadErr.message);
+      sendBtn.disabled = false; return;
+    }
 
-      /* 2. публичная ссылка (для приватного bucket можно signedUrl) */
-      const { data:{ publicUrl } } = supabase
-        .storage.from("specs").getPublicUrl(path);
+    /* 2. public URL */
+    const { data:{ publicUrl } } = sb.storage.from("specs").getPublicUrl(path);
 
-      /* 3. insert row */
-      const { data: row, error: insErr } = await supabase
-        .from("requests")
-        .insert({ filename:selectedFile.name, spec_url:publicUrl })
-        .select().single();
+    /* 3. insert row */
+    const { data: row, error: insErr } = await sb
+      .from("requests")
+      .insert({ filename:selectedFile.name, spec_url:publicUrl })
+      .select().single();
 
-      if (insErr){
-        alert("DB ошибка: "+insErr.message);
-        sendBtn.disabled = false; return;
-      }
+    if (insErr){
+      alert("DB ошибка: "+insErr.message);
+      sendBtn.disabled = false; return;
+    }
 
-      /* 4. вызвать Edge‑Function */
-      fetch("https://nnelvjvcxqugsevbykfn.supabase.co/functions/v1/generate_csv", { // !!
-        method:"POST",
-        headers:{ "Content-Type":"application/json" },
-        body:JSON.stringify({ request_id:row.id })
-      });
-
-      /* 5. очистить форму */
-      selectedFile = null;
-      filesContainer.innerHTML = "";
-      sendBtn.disabled = true;
+    /* 4. Edge Function */
+    fetch("https://nnelvjvcxqugsevbykfn.supabase.co/functions/v1/generate_csv", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify({ request_id:row.id })
     });
 
-    /* ---------- История (live) ---------- */
-    async function loadHistory(){
-      const { data, error } = await supabase
-        .from("requests")
-        .select("*").order("created_at",{ascending:false});
-      if (error) return;
+    /* 5. очистка формы */
+    selectedFile = null;
+    filesContainer.innerHTML = "";
+    sendBtn.disabled = true;
+  });
 
-      document.getElementById("history-list").innerHTML = data.map(r=>`
-        <div class="history-item">
-          <strong>${new Date(r.created_at).toLocaleString()}</strong><br>
-          <a href="${r.spec_url}" target="_blank">Запрос: ${r.filename}</a><br>
-          ${r.csv_url ?
-             `<a href="${r.csv_url}" target="_blank">Ответ CSV</a>` :
-             "⏳ обработка"}
-        </div>
-      `).join("");
-    }
-    loadHistory();
+  /* ---------- История ---------- */
+  async function loadHistory(){
+    const { data, error } = await sb
+      .from("requests").select("*")
+      .order("created_at",{ascending:false});
+    if (error) return;
 
-    supabase.channel("requests-watch")
-      .on("postgres_changes",
-          { event:"*", schema:"public", table:"requests" },
-          loadHistory)
-      .subscribe();
-  </script>
-</body>
-</html>
+    document.getElementById("history-list").innerHTML = data.map(r=>`
+      <div class="history-item">
+        <strong>${new Date(r.created_at).toLocaleString()}</strong><br>
+        <a href="${r.spec_url}" target="_blank">Запрос: ${r.filename}</a><br>
+        ${r.csv_url ? `<a href="${r.csv_url}" target="_blank">Ответ CSV</a>` : "⏳ обработка"}
+      </div>
+    `).join("");
+  }
+  loadHistory();
+
+  sb.channel("requests-watch")
+    .on("postgres_changes",
+        { event:"*", schema:"public", table:"requests" },
+        loadHistory)
+    .subscribe();
+</script>
