@@ -136,9 +136,11 @@ function handleFile(file){
       .select().single();
 
     if (insErr){
-      alert("DB ошибка: "+insErr.message);
-      sendBtn.disabled = false; return;
-    }
+  console.error(insErr);            // ← добавьте лог
+  alert("DB ошибка: "+insErr.message);
+  sendBtn.disabled = false;
+  return;
+}
 
     /* 4. Edge Function */
     fetch("https://nnelvjvcxqugsevbykfn.supabase.co/functions/v1/generate_csv", {
