@@ -117,10 +117,10 @@ const fileInput = document.getElementById('fileInput');
 
     // 3) Создаём запись в БД
      const { data: reqData, error: insertError } = await supabase
-   .from('requests')
-   .insert({ file_path: filePath })
-   .select()
-   .single();
+  .from('requests')
+  .insert({ file_path: filePath })
+  .select()
+  .single();
 
     if (insertError) {
       alert('Ошибка при создании записи: ' + insertError.message);
