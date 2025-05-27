@@ -48,119 +48,105 @@
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    const fileInput  = document.getElementById('fileInput');
-    const uploadBtn  = document.getElementById('uploadBtn');
-    const tbody       = document.querySelector('#historyTable tbody');
+const fileInput = document.getElementById('fileInput');
+  const uploadBtn = document.getElementById('uploadBtn');
+  const tbody     = document.querySelector('#historyTable tbody');
 
-    // Загрузка истории запросов
-    async function loadRequests() {
-      tbody.innerHTML = '';
-      const { data, error } = await supabase
-        .from('requests')
-        .select('*')
-        .order('created_at', { ascending: false });
+  // ——— Функция для «очистки» имени файла ———
+  function sanitizeFileName(name) {
+    return name
+      .normalize('NFKD')               // разложение Unicode
+      .replace(/[\u0300-\u036f]/g, '') // удаляем диакритику
+      .replace(/[^a-zA-Z0-9._-]/g, '_'); // оставляем только ASCII, цифры, . _ -
+  }
 
-      if (error) {
-        console.error('Ошибка при загрузке истории:', error);
-        return;
-      }
+  // ——— Загрузка истории запросов ———
+  async function loadRequests() {
+    tbody.innerHTML = '';
+    const { data, error } = await supabase
+      .from('requests')
+      .select('*')
+      .order('created_at', { ascending: false });
 
-      for (const r of data) {
-        const tr = document.createElement('tr');
-
-        // Дата
-        const tdDate = document.createElement('td');
-        tdDate.textContent = new Date(r.created_at).toLocaleString();
-        tr.appendChild(tdDate);
-
-        // Путь к файлу ТЗ
-        const tdFile = document.createElement('td');
-        tdFile.textContent = r.file_path;
-        tr.appendChild(tdFile);
-
-        // Статус
-        const tdStatus = document.createElement('td');
-        tdStatus.textContent = r.status;
-        tr.appendChild(tdStatus);
-
-        // Ответ (ссылка на CSV)
-        const tdResp = document.createElement('td');
-        if (r.response_path) {
-          const url = supabase
-            .storage
-            .from('responses')
-            .getPublicUrl(r.response_path)
-            .publicURL;
-          const a = document.createElement('a');
-          a.href = url;
-          a.target = '_blank';
-          a.textContent = 'Скачать CSV';
-          tdResp.appendChild(a);
-        } else {
-          tdResp.textContent = '—';
-        }
-        tr.appendChild(tdResp);
-
-        tbody.appendChild(tr);
-      }
+    if (error) {
+      console.error('Ошибка при загрузке истории:', error);
+      return;
     }
 
-    // Загрузка файла и отправка в Edge Function
-    async function uploadAndSend() {
-      const file = fileInput.files[0];
-      if (!file) {
-        alert('Пожалуйста, выберите файл ТЗ.');
-        return;
-      }
+    for (const r of data) {
+      const tr = document.createElement('tr');
 
-      // 1) Загружаем файл в Storage
-      const filePath = `${Date.now()}_${file.name}`;
-      let { error: uploadError } = await supabase
-        .storage
-        .from('spec-files')
-        .upload(filePath, file, { upsert: false });
+      // Дата
+      tr.innerHTML = `
+        <td>${new Date(r.created_at).toLocaleString()}</td>
+        <td>${r.file_path}</td>
+        <td>${r.status}</td>
+        <td>${r.response_path 
+             ? `<a href="${supabase
+                 .storage
+                 .from('responses')
+                 .getPublicUrl(r.response_path)
+                 .publicURL}" target="_blank">Скачать CSV</a>`
+             : '—'}
+        </td>`;
+      tbody.appendChild(tr);
+    }
+  }
 
-      if (uploadError) {
-        alert('Ошибка загрузки файла: ' + uploadError.message);
-        return;
-      }
+  // ——— Загрузка файла и отправка в Edge Function ———
+  async function uploadAndSend() {
+    const file = fileInput.files[0];
+    if (!file) {
+      alert('Пожалуйста, выберите файл ТЗ.');
+      return;
+    }
 
-      // 2) Создаём запись в БД
-      const { data: reqData, error: insertError } = await supabase
-        .from('requests')
-        .insert({
-          user_id: supabase.auth.user()?.id,  // убедитесь, что пользователь залогинен
-          file_path: filePath
-        })
-        .select()
-        .single();
+    // 1) Формируем безопасный путь
+    const cleanName = sanitizeFileName(file.name);
+    const filePath  = `${Date.now()}_${cleanName}`;
 
-      if (insertError) {
-        alert('Ошибка при создании записи: ' + insertError.message);
-        return;
-      }
+    // 2) Загружаем в бакет spec-files
+    const { error: uploadError } = await supabase
+      .storage
+      .from('spec-files')
+      .upload(filePath, file);
+    if (uploadError) {
+      alert('Ошибка загрузки файла: ' + uploadError.message);
+      return;
+    }
 
-      // 3) Вызываем Edge Function для обработки
-      fetch(FUNCTIONS_URL, {
+    // 3) Создаём запись в БД
+    const { data: reqData, error: insertError } = await supabase
+      .from('requests')
+      .insert({
+        user_id: supabase.auth.user()?.id,
+        file_path: filePath
+      })
+      .select()
+      .single();
+    if (insertError) {
+      alert('Ошибка при создании записи: ' + insertError.message);
+      return;
+    }
+
+    // 4) Вызываем Edge Function для обработки
+    try {
+      const res = await fetch(FUNCTIONS_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ request_id: reqData.id })
-      })
-      .then(res => {
-        if (!res.ok) throw new Error('Ошибка сервиса');
-        return res.json();
-      })
-      .then(() => loadRequests())
-      .catch(err => {
-        console.error('Edge Function error:', err);
-        loadRequests();
       });
+      if (!res.ok) throw new Error('Ошибка сервиса');
+    } catch (err) {
+      console.error('Edge Function error:', err);
     }
 
-    uploadBtn.addEventListener('click', uploadAndSend);
+    // 5) Обновляем таблицу истории
+    await loadRequests();
+  }
 
-    // При загрузке страницы сразу подгружаем историю
-    loadRequests();
-  </script>
-</body>
-</html>
+  uploadBtn.addEventListener('click', uploadAndSend);
+
+  // Подгружаем историю при стартe
+  loadRequests();
+</script>
