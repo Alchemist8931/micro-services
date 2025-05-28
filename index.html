@@ -86,22 +86,18 @@ const safeName = n => n.normalize('NFKD')
 
 function preview(file){
   filesBox.innerHTML =
-    `<div class="file-item">
-       <span>${file.name}</span>
-       <span>${(file.size/1024/1024).toFixed(2)} МБ</span>
-     </div>`;
+    `<div class="file-item"><span>${file.name}</span>
+     <span>${(file.size/1_048_576).toFixed(2)} МБ</span></div>`;
   sendBtn.disabled = false;
 }
 
 /* drag‑n‑drop визуал */
-['dragenter','dragover'].forEach(evt=>dropzone.addEventListener(evt,e=>{
-  e.preventDefault(); dropzone.classList.add('dragover');
-}));
-['dragleave','drop'].forEach(evt=>dropzone.addEventListener(evt,e=>{
-  e.preventDefault(); dropzone.classList.remove('dragover');
-}));
+['dragenter','dragover'].forEach(evt =>
+  dropzone.addEventListener(evt,e=>{e.preventDefault();dropzone.classList.add('dragover');}));
+['dragleave','drop'].forEach(evt =>
+  dropzone.addEventListener(evt,e=>{e.preventDefault();dropzone.classList.remove('dragover');}));
 dropzone.addEventListener('drop', e=>{
-  const f=e.dataTransfer.files[0]; if(f){ fileInput.files=e.dataTransfer.files; preview(f); }
+  const f=e.dataTransfer.files[0]; if(f){ fileInput.files=e.dataTransfer.files; preview(f);}
 });
 fileInput.addEventListener('change', e=>{
   const f=e.target.files[0]; if(f) preview(f);
@@ -109,15 +105,23 @@ fileInput.addEventListener('change', e=>{
 
 /* ───── 4. история ───── */
 async function loadHistory(){
-  tbody.innerHTML='';
-  const { data, error } = await supabase.from('requests')
-    .select('*').order('created_at',{ascending:false});
+  tbody.innerHTML = '';
+
+  const { data:{ user }, error:authErr } = await sb.auth.getUser();
+  if(authErr || !user){ tbody.innerHTML='<tr><td colspan="4">Не вошли</td></tr>'; return; }
+
+  const { data, error } = await sb
+    .from('requests')
+    .select('*')
+    .eq('user_id', user.id)             //   ← только «мои» записи
+    .order('created_at',{ ascending:false });
+
   if(error){ console.error(error); return; }
 
   data.forEach(r=>{
     const url = r.response_path
-      ? supabase.storage.from('user-uploads')
-        .getPublicUrl(r.response_path).data.publicUrl
+      ? sb.storage.from('user-uploads')
+           .getPublicUrl(r.response_path).data.publicUrl
       : null;
     tbody.insertAdjacentHTML('beforeend',`
       <tr>
@@ -129,44 +133,49 @@ async function loadHistory(){
   });
 }
 
-/* ───── 5. отправка (без TUS) ───── */
+/* ───── 5. отправка (обычный upload) ───── */
 async function uploadAndSend(){
-  const file=fileInput.files[0];
+  const file = fileInput.files[0];
   if(!file){ alert('Выберите файл'); return; }
-  if(file.size > 50*1024*1024){ alert('Файл больше 50 МБ — загрузка отклонена'); return; }
+  if(file.size > 50*1024*1024){ alert('>50 МБ — не загружаем'); return; }
 
-  const objKey = `${Date.now()}_${safeName(file.name)}`;
+  /* 5.0 проверяем сессию */
+  const { data:{ user }, error:authErr } = await sb.auth.getUser();
+  if(authErr || !user){ alert('Сначала войдите'); return; }
+  const uid = user.id;
 
-  /* 5.1 upload */
-  const { error:upErr } = await supabase
-    .storage.from('user-uploads')
-    .upload(objKey, file, { upsert:true });
+  /* 5.1 upload в Storage */
+  const key = `${Date.now()}_${safeName(file.name)}`;
+  const { error:upErr } = await sb.storage.from('user-uploads')
+                             .upload(key, file, { upsert:true });
   if(upErr){ alert('Ошибка загрузки: '+upErr.message); return; }
 
-  /* 5.2 insert row */
-  const { data:reqRow, error:rowErr } = await supabase
+  /* 5.2 INSERT row */
+  const { data:reqRow, error:rowErr } = await sb
     .from('requests')
-    .insert({ file_path:objKey, status:'pending' })
-    .select().single();
+    .insert({ user_id:uid, file_path:key, status:'pending' })
+    .select()
+    .single();
   if(rowErr){ alert(rowErr.message); return; }
 
-  /* 5.3 invoke Edge Function */
+  /* 5.3 Edge Function */
   try{
-    const res = await fetch(FUNCTIONS_URL,{
+    const r = await fetch(FN_URL, {
       method:'POST',
-      headers:{ 'Content-Type':'application/json' },
-      body:JSON.stringify({ request_id:reqRow.id })
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ request_id:reqRow.id })
     });
-    if(!res.ok) console.error('Edge Function:', await res.text());
+    if(!r.ok) console.error('Edge Function:', await r.text());
   }catch(e){ console.error(e); }
 
-  /* UI reset */
+  /* 5.4 UI reset */
   fileInput.value=''; filesBox.innerHTML=''; sendBtn.disabled=true;
   loadHistory();
 }
 
 sendBtn.addEventListener('click', uploadAndSend);
 loadHistory();
+  
 </script>
 </body>
 </html>
