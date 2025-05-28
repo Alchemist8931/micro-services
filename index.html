@@ -5,37 +5,42 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Подбор оборудования</title>
 
-  <!-- Supabase SDK -->
+  <!-- Supabase JS SDK -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <!-- ① обязательно подключаем tus-js-client -->
-  <script src="https://unpkg.com/tus-js-client@3.1.0/dist/tus.min.js"></script>
 
   <style>
-    /* — стили те же — */
-    *,*:before,*:after{box-sizing:border-box}body{margin:0;font-family:Inter,Arial,sans-serif;
-    background:#f5f5f5;display:flex;justify-content:center;min-height:100vh;padding:2rem}
+    *,*::before,*::after{box-sizing:border-box}
+    body{margin:0;font-family:Inter,Arial,sans-serif;background:#f5f5f5;
+         display:flex;justify-content:center;min-height:100vh;padding:2rem}
     .uploader{width:820px;max-width:100%;background:#fff;border-radius:24px;padding:32px;
               box-shadow:0 4px 24px rgba(0,0,0,.08)}
     .dropzone{position:relative;border:2px dashed #d9d9d9;border-radius:16px;padding:48px 24px;
               text-align:center;cursor:pointer;transition:background .2s}
-    .dropzone.dragover{background:#fafafa}.dropzone svg{width:48px;height:48px;color:#8c8c8c}
-    .dropzone p{margin:12px 0 0;font-size:14px;color:#8c8c8c}.files{margin-top:24px}
-    .file-item{display:flex;justify-content:space-between;align-items:center;
-               border:1px solid #eee;border-radius:12px;padding:12px 16px;margin-bottom:12px;
-               font-size:14px}.send-btn{width:100%;padding:14px;margin-top:8px;border:none;
-               border-radius:12px;background:#000;color:#fff;font-size:16px;font-weight:600;
-               cursor:pointer;transition:opacity .2s}.send-btn:disabled{opacity:.35;cursor:not-allowed}
-    .history{margin-top:40px}.history h2{font-size:16px;margin:0 0 12px;color:#333}
-    table{width:100%;border-collapse:collapse;font-size:14px}th,td{padding:8px 6px;border-bottom:1px solid #eee}
-    th{text-align:left;background:#fafafa}a{color:#0066cc;text-decoration:none}a:hover{text-decoration:underline}
+    .dropzone.dragover{background:#fafafa}
+    .dropzone svg{width:48px;height:48px;color:#8c8c8c}
+    .dropzone p{margin:12px 0 0;font-size:14px;color:#8c8c8c}
+    .files{margin-top:24px}
+    .file-item{display:flex;justify-content:space-between;align-items:center;border:1px solid #eee;
+               border-radius:12px;padding:12px 16px;margin-bottom:12px;font-size:14px}
+    .send-btn{width:100%;padding:14px;margin-top:8px;border:none;border-radius:12px;background:#000;
+              color:#fff;font-size:16px;font-weight:600;cursor:pointer;transition:opacity .2s}
+    .send-btn:disabled{opacity:.35;cursor:not-allowed}
+    .history{margin-top:40px}
+    .history h2{font-size:16px;margin:0 0 12px;color:#333}
+    table{width:100%;border-collapse:collapse;font-size:14px}
+    th,td{padding:8px 6px;border-bottom:1px solid #eee}
+    th{text-align:left;background:#fafafa}
+    a{color:#0066cc;text-decoration:none}
+    a:hover{text-decoration:underline}
   </style>
 </head>
-<body>
 
+<body>
   <div class="uploader">
+    <!-- зона выбора / перетаскивания файла -->
     <label id="dropzone" class="dropzone">
       <input id="file-input" type="file" accept=".pdf,.doc,.docx,.txt,.xlsx,.zip"
-             style="position:absolute;inset:0;opacity:0;cursor:pointer"/>
+             style="position:absolute;inset:0;opacity:0;cursor:pointer" />
       <div style="pointer-events:none">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
              stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -44,11 +49,11 @@
           <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"></path>
           <polyline points="16 16 12 12 8 16"></polyline>
         </svg>
-        <p>Перетащите файл сюда или нажмите<br><small>до 20 МБ</small></p>
+        <p>Перетащите файл сюда или нажмите<br><small>до 50 МБ</small></p>
       </div>
     </label>
 
-    <div id="files"  class="files"></div>
+    <div id="files" class="files"></div>
     <button id="send-btn" class="send-btn" disabled>Отправить на подбор оборудования</button>
 
     <div class="history">
@@ -61,125 +66,107 @@
   </div>
 
 <script type="module">
-    
-    /* ---------- Supabase init ---------- */
-    const SUPABASE_URL = 'https://nnelvjvcxqugsevbykfn.supabase.co';
-    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5uZWx2anZjeHF1Z3NldmJ5a2ZuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgzNzI1NzcsImV4cCI6MjA2Mzk0ODU3N30.hTaareGOoQ4Mp9ft3HfNmktqSGb9l2Ie4TGyE1X-ibI';
-    const FUNCTIONS_URL = 'https://nnelvjvcxqugsevbykfn.supabase.co/functions/v1/equip-selector';
-  const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+/* ───── 1. Supabase init ───── */
+const SUPABASE_URL  = 'https://nnelvjvcxqugsevbykfn.supabase.co';
+const SUPABASE_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5uZWx2anZjeHF1Z3NldmJ5a2ZuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgzNzI1NzcsImV4cCI6MjA2Mzk0ODU3N30.hTaareGOoQ4Mp9ft3HfNmktqSGb9l2Ie4TGyE1X-ibI';
+const FUNCTIONS_URL = 'https://nnelvjvcxqugsevbykfn.supabase.co/functions/v1/equip-selector';
+const supabase      = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-  /*–– DOM ––*/
-  const dropzone = document.getElementById('dropzone');
-  const fileInput= document.getElementById('file-input');
-  const filesBox = document.getElementById('files');
-  const sendBtn  = document.getElementById('send-btn');
-  const tbody    = document.querySelector('#historyTable tbody');
+/* ───── 2. DOM ───── */
+const dropzone = document.getElementById('dropzone');
+const fileInput= document.getElementById('file-input');
+const filesBox = document.getElementById('files');
+const sendBtn  = document.getElementById('send-btn');
+const tbody    = document.querySelector('#historyTable tbody');
 
-  /*–– helpers ––*/
-  const safeName = n => n.normalize('NFKD')
-                         .replace(/[\u0300-\u036f]/g,'')
-                         .replace(/[^a-zA-Z0-9._-]/g,'_');
+/* ───── 3. helpers ───── */
+const safeName = n => n.normalize('NFKD')
+                       .replace(/[\u0300-\u036f]/g,'')
+                       .replace(/[^a-zA-Z0-9._-]/g,'_');
 
-  function preview(file){
-    filesBox.innerHTML =
-      `<div class="file-item">
-         <span>${file.name}</span>
-         <span>${(file.size/1024/1024).toFixed(2)} МБ</span>
-       </div>`;
-    sendBtn.disabled = false;
-  }
-
-  /* drag‑n‑drop */
-  ['dragenter','dragover'].forEach(e=>dropzone.addEventListener(e,ev=>{
-    ev.preventDefault(); dropzone.classList.add('dragover');
-  }));
-  ['dragleave','drop'].forEach(e=>dropzone.addEventListener(e,ev=>{
-    ev.preventDefault(); dropzone.classList.remove('dragover');
-  }));
-  dropzone.addEventListener('drop', e=>{
-    const f=e.dataTransfer.files[0]; if(f){ fileInput.files=e.dataTransfer.files; preview(f); }
-  });
-  fileInput.addEventListener('change', e=>{ const f=e.target.files[0]; if(f) preview(f); });
-
-  /* история */
-  async function loadHistory(){
-    tbody.innerHTML='';
-    const { data } = await supabase.from('requests')
-      .select('*').order('created_at',{ascending:false});
-    data.forEach(r=>{
-      const url = r.response_path
-        ? supabase.storage.from('user-uploads')
-          .getPublicUrl(r.response_path).data.publicUrl
-        : null;
-      tbody.insertAdjacentHTML('beforeend',`
-        <tr>
-          <td>${new Date(r.created_at).toLocaleString()}</td>
-          <td>${r.file_path}</td>
-          <td>${r.status}</td>
-          <td>${url?`<a href="${url}" target="_blank">CSV</a>`:'—'}</td>
-        </tr>`);
-    });
-  }
-
-  /*–– отправка с tus ––*/
-  async function uploadAndSend () {
-  const file = fileInput.files[0];
-  if (!file) { alert('Выберите файл'); return; }
-
-  const objKey   = `${Date.now()}_${safeName(file.name)}`;
-  const endpoint = `${SUPABASE_URL}/storage/v1/upload/resumable`;
-
-  const upload = new tus.Upload(file, {
-  endpoint,
-  chunkSize: 8 * 1024 * 1024,
-  metadata: {
-    filename: objKey,
-    filetype: file.type || 'application/octet-stream'
-  },
-  headers: {
-    'x-upsert': 'true',
-    authorization: `Bearer ${SUPABASE_KEY}`
-  },
-
-  // ───── исправлено:
-  onProgress(sent, total) {
-    const pct = Math.round(sent / total * 100);
-    filesBox.innerHTML =
-      `<div class="file-item">
-         <span>${file.name}</span><span>${pct}%</span>
-       </div>`;
-  },
-
-  onSuccess()  { afterUpload(objKey); },
-  onError(e)   { alert('Ошибка загрузки: ' + e); }
-});
-
-  upload.start();
+function preview(file){
+  filesBox.innerHTML =
+    `<div class="file-item">
+       <span>${file.name}</span>
+       <span>${(file.size/1024/1024).toFixed(2)} МБ</span>
+     </div>`;
+  sendBtn.disabled = false;
 }
 
+/* drag‑n‑drop визуал */
+['dragenter','dragover'].forEach(evt=>dropzone.addEventListener(evt,e=>{
+  e.preventDefault(); dropzone.classList.add('dragover');
+}));
+['dragleave','drop'].forEach(evt=>dropzone.addEventListener(evt,e=>{
+  e.preventDefault(); dropzone.classList.remove('dragover');
+}));
+dropzone.addEventListener('drop', e=>{
+  const f=e.dataTransfer.files[0]; if(f){ fileInput.files=e.dataTransfer.files; preview(f); }
+});
+fileInput.addEventListener('change', e=>{
+  const f=e.target.files[0]; if(f) preview(f);
+});
 
-  async function afterUpload(key){
-    const { data,rowErr } = await supabase
-      .from('requests')
-      .insert({ file_path:key, status:'pending' })
-      .select().single();
-    if(rowErr){ alert(rowErr.message); return; }
+/* ───── 4. история ───── */
+async function loadHistory(){
+  tbody.innerHTML='';
+  const { data, error } = await supabase.from('requests')
+    .select('*').order('created_at',{ascending:false});
+  if(error){ console.error(error); return; }
 
-    try{
-      const res = await fetch(FUNCTIONS_URL,{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({ request_id:data.id })
-      });
-      if(!res.ok) console.error('Edge Function:',await res.text());
-    }catch(e){ console.error(e); }
+  data.forEach(r=>{
+    const url = r.response_path
+      ? supabase.storage.from('user-uploads')
+        .getPublicUrl(r.response_path).data.publicUrl
+      : null;
+    tbody.insertAdjacentHTML('beforeend',`
+      <tr>
+        <td>${new Date(r.created_at).toLocaleString()}</td>
+        <td>${r.file_path}</td>
+        <td>${r.status}</td>
+        <td>${url ? `<a href="${url}" target="_blank">CSV</a>` : '—'}</td>
+      </tr>`);
+  });
+}
 
-    fileInput.value=''; filesBox.innerHTML=''; sendBtn.disabled=true;
-    loadHistory();
-  }
+/* ───── 5. отправка (без TUS) ───── */
+async function uploadAndSend(){
+  const file=fileInput.files[0];
+  if(!file){ alert('Выберите файл'); return; }
+  if(file.size > 50*1024*1024){ alert('Файл больше 50 МБ — загрузка отклонена'); return; }
 
-  sendBtn.addEventListener('click', uploadAndSend);
+  const objKey = `${Date.now()}_${safeName(file.name)}`;
+
+  /* 5.1 upload */
+  const { error:upErr } = await supabase
+    .storage.from('user-uploads')
+    .upload(objKey, file, { upsert:true });
+  if(upErr){ alert('Ошибка загрузки: '+upErr.message); return; }
+
+  /* 5.2 insert row */
+  const { data:reqRow, error:rowErr } = await supabase
+    .from('requests')
+    .insert({ file_path:objKey, status:'pending' })
+    .select().single();
+  if(rowErr){ alert(rowErr.message); return; }
+
+  /* 5.3 invoke Edge Function */
+  try{
+    const res = await fetch(FUNCTIONS_URL,{
+      method:'POST',
+      headers:{ 'Content-Type':'application/json' },
+      body:JSON.stringify({ request_id:reqRow.id })
+    });
+    if(!res.ok) console.error('Edge Function:', await res.text());
+  }catch(e){ console.error(e); }
+
+  /* UI reset */
+  fileInput.value=''; filesBox.innerHTML=''; sendBtn.disabled=true;
   loadHistory();
+}
+
+sendBtn.addEventListener('click', uploadAndSend);
+loadHistory();
 </script>
 </body>
 </html>
