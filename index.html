@@ -128,8 +128,8 @@
 
   const objKey = `${Date.now()}_${safeName(file.name)}`;
   const endpoint =
-    `${SUPABASE_URL}/storage/v1/upload/resumable` +
-    `?bucket=user-uploads&object=${encodeURIComponent(objKey)}`;
+  `${SUPABASE_URL}/storage/v1/upload/resumable` +
+  `?bucketName=user-uploads&object=${encodeURIComponent(objKey)}`;
 
   const upload = new tus.Upload(file, {
     endpoint,
