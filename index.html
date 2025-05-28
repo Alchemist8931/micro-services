@@ -1,15 +1,15 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Подбор оборудования (stub‑login)</title>
 
-  <!-- Supabase JS -->
+  <!-- Supabase SDK -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
   <style>
-    *,*:before,*:after{box-sizing:border-box}
+    *,*::before,*::after{box-sizing:border-box}
     body{margin:0;font-family:Inter,Arial,sans-serif;background:#f5f5f5;
          display:flex;justify-content:center;min-height:100vh;padding:2rem}
     .uploader{width:820px;max-width:100%;background:#fff;border-radius:24px;padding:32px;
@@ -34,9 +34,10 @@
     a:hover{text-decoration:underline}
   </style>
 </head>
+
 <body>
 
-  <!-- ▸ Зона загрузки и история -->
+  <!-- Зона загрузки + история -->
   <div class="uploader">
     <label id="dropzone" class="dropzone">
       <input id="file-input" type="file"
@@ -55,18 +56,20 @@
     </label>
 
     <div id="files" class="files"></div>
-    <button id="send-btn" class="send-btn" disabled>Отправить на подбор оборудования</button>
+    <button id="send-btn" class="send-btn" disabled>
+      Отправить на подбор оборудования
+    </button>
 
     <div class="history">
       <h2>История запросов</h2>
       <table id="historyTable">
-        <thead><tr><th>Дата</th><th>Файл ТЗ</th><th>Статус</th><th>Ответ</th></tr></thead>
+        <thead><tr><th>Дата</th><th>Файл ТЗ</th><th>Статус</th><th>Ответ</th></tr></thead>
         <tbody></tbody>
       </table>
     </div>
   </div>
 
-<!-- ───────── JS‑модуль ───────── -->
+<!-- ───────── Основной модуль ───────── -->
 <script type="module">
   
 /* ───── 1. Supabase init ───── */
@@ -74,38 +77,36 @@ const SUPABASE_URL  = 'https://nnelvjvcxqugsevbykfn.supabase.co';
 const SUPABASE_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5uZWx2anZjeHF1Z3NldmJ5a2ZuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgzNzI1NzcsImV4cCI6MjA2Mzk0ODU3N30.hTaareGOoQ4Mp9ft3HfNmktqSGb9l2Ie4TGyE1X-ibI';
 const FN_URL = 'https://nnelvjvcxqugsevbykfn.supabase.co/functions/v1/equip-selector';
 
-const DEMO_EMAIL    = 'alchemist8931@example.com';
-const DEMO_PASSWORD = 'demo1234';
+const PRESET_EMAIL    = 'alchemist8931@example.com';
+const PRESET_PASSWORD = 'demo1234';
 
-const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
-  auth:{ persistSession:true }
-});
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY,
+  { auth:{ persistSession:true } });
 
-/* 2. DOM refs */
+/* 2. DOM ↓ */
 const dropzone = document.getElementById('dropzone');
-const fileInput = document.getElementById('file-input');
-const filesBox  = document.getElementById('files');
-const sendBtn   = document.getElementById('send-btn');
-const tbody     = document.querySelector('#historyTable tbody');
+const fileInput= document.getElementById('file-input');
+const filesBox = document.getElementById('files');
+const sendBtn  = document.getElementById('send-btn');
+const tbody    = document.querySelector('#historyTable tbody');
 
-/* 3. helpers */
-const safeName = s => s.normalize('NFKD')
+/* 3. helpers ↓ */
+const safeName = n => n.normalize('NFKD')
                        .replace(/[\u0300-\u036f]/g,'')
                        .replace(/[^a-zA-Z0-9._-]/g,'_');
 
 function preview(f){
   filesBox.innerHTML =
-    `<div class="file-item"><span>${f.name}</span><span>${(f.size/1_048_576).toFixed(2)} МБ</span></div>`;
+    `<div class="file-item"><span>${f.name}</span>
+     <span>${(f.size/1_048_576).toFixed(2)} МБ</span></div>`;
   sendBtn.disabled = false;
 }
 
-/* 4. drag & drop ux */
-['dragenter','dragover'].forEach(ev=>dropzone.addEventListener(ev,e=>{
-  e.preventDefault(); dropzone.classList.add('dragover');
-}));
-['dragleave','drop'].forEach(ev=>dropzone.addEventListener(ev,e=>{
-  e.preventDefault(); dropzone.classList.remove('dragover');
-}));
+/* 4. drag‑n‑drop визуал ↓ */
+['dragenter','dragover'].forEach(evt =>
+  dropzone.addEventListener(evt,e=>{e.preventDefault();dropzone.classList.add('dragover');}));
+['dragleave','drop'].forEach(evt =>
+  dropzone.addEventListener(evt,e=>{e.preventDefault();dropzone.classList.remove('dragover');}));
 dropzone.addEventListener('drop', e=>{
   const f=e.dataTransfer.files[0]; if(f){ fileInput.files=e.dataTransfer.files; preview(f); }
 });
@@ -113,22 +114,24 @@ fileInput.addEventListener('change', e=>{
   const f=e.target.files[0]; if(f) preview(f);
 });
 
-/* 5. history */
+/* 5. История ↓ */
 async function loadHistory(){
   tbody.innerHTML = '';
   const { data:{ user } } = await sb.auth.getUser();
-  if(!user) return;
+  if(!user){ return; }
 
   const { data, error } = await sb
-        .from('requests')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at',{ascending:false});
+    .from('requests')
+    .select('*')
+    .eq('user_id', user.id)
+    .order('created_at',{ ascending:false });
+
   if(error){ console.error(error); return; }
 
   data.forEach(r=>{
     const url = r.response_path
-      ? sb.storage.from('user-uploads').getPublicUrl(r.response_path).data.publicUrl
+      ? sb.storage.from('user-uploads')
+          .getPublicUrl(r.response_path).data.publicUrl
       : null;
     tbody.insertAdjacentHTML('beforeend',`
       <tr>
@@ -140,19 +143,19 @@ async function loadHistory(){
   });
 }
 
-/* 6. upload & invoke */
+/* 6. Загрузка файла + Edge Function ↓ */
 async function uploadAndSend(){
   const file = fileInput.files[0];
   if(!file){ alert('Выберите файл'); return; }
-  if(file.size > 50*1024*1024){ alert('>50 МБ — не загружаем'); return; }
+  if(file.size > 50*1024*1024){ alert('>50 МБ — не загружаем'); return; }
 
   const { data:{ user } } = await sb.auth.getUser();
-  if(!user){ alert('Нет сессии, перезагрузите страницу'); return; }
+  if(!user){ alert('Сессии нет, перезагрузите страницу'); return; }
 
   const key = `${Date.now()}_${safeName(file.name)}`;
 
   const { error:upErr } = await sb.storage.from('user-uploads')
-                       .upload(key, file, { upsert:true });
+                         .upload(key, file, { upsert:true });
   if(upErr){ alert('Upload: '+upErr.message); return; }
 
   const { data:reqRow, error:rowErr } = await sb
@@ -164,7 +167,7 @@ async function uploadAndSend(){
   try{
     const r = await fetch(FN_URL,{
       method:'POST',
-      headers:{'Content-Type':'application/json'},
+      headers:{ 'Content-Type':'application/json' },
       body: JSON.stringify({ request_id:reqRow.id })
     });
     if(!r.ok) console.error('Edge Function:', await r.text());
@@ -173,42 +176,23 @@ async function uploadAndSend(){
   fileInput.value=''; filesBox.innerHTML=''; sendBtn.disabled=true;
   loadHistory();
 }
+
 sendBtn.addEventListener('click', uploadAndSend);
 
-/* 7. stub‑login with fallback sign‑up */
+/* 7. stub‑login: только sign‑in ↓ */
 (async function ensureStubSession(){
   const { data:{ session } } = await sb.auth.getSession();
-  if(session){ loadHistory(); return; }
-
-  /* #1 ── sign‑in попытка */
-  let { error } = await sb.auth.signInWithPassword({
-    email: DEMO_EMAIL,
-    password: DEMO_PASSWORD
-  });
-
-  /* #2 ── если 400 Invalid credentials → пробуем sign‑up → sign‑in */
-  if(error && error.status === 400){
-    const { error:upErr } = await sb.auth.signUp({
-      email: DEMO_EMAIL,
-      password: DEMO_PASSWORD,
-      options:{ emailRedirectTo: location.href }
+  if(!session){
+    const { error } = await sb.auth.signInWithPassword({
+      email: PRESET_EMAIL,
+      password: PRESET_PASSWORD
     });
-    if(upErr && upErr.status !== 400){          // 400 here = user already exists
-      console.error('signUp:', upErr.message);
-      alert('stub‑login: '+upErr.message);
-      return;
+    if(error){
+      console.error('stub‑login error:', error.message);
+      alert('stub‑login: '+error.message+
+            '\nПроверьте, что пароль «demo1234» действительно записан в auth.users');
+      return;             /* приложение дальше не работает */
     }
-    /* повторяем вход */
-    ({ error } = await sb.auth.signInWithPassword({
-      email: DEMO_EMAIL,
-      password: DEMO_PASSWORD
-    }));
-  }
-
-  if(error){
-    console.error('stub‑login error:', error.message);
-    alert('stub‑login: '+error.message);
-    return;
   }
   loadHistory();
 })();
