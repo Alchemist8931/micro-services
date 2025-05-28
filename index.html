@@ -122,34 +122,38 @@
   }
 
   /*–– отправка с tus ––*/
-  async function uploadAndSend(){
-    const file=fileInput.files[0];
-    if(!file){ alert('Выберите файл'); return; }
+  async function uploadAndSend () {
+  const file = fileInput.files[0];
+  if (!file) { alert('Выберите файл'); return; }
 
-    const objKey = `${Date.now()}_${safeName(file.name)}`;
-    const endpoint = `${SUPABASE_URL}/storage/v1/upload/resumable`
-                   + `?bucket=user-uploads&object=${encodeURIComponent(objKey)}`;
+  const objKey = `${Date.now()}_${safeName(file.name)}`;
+  const endpoint =
+    `${SUPABASE_URL}/storage/v1/upload/resumable` +
+    `?bucket=user-uploads&object=${encodeURIComponent(objKey)}`;
 
-    const upload = new tus.Upload(file,{
-      endpoint,
-      chunkSize: 8*1024*1024,
-      metadata: { filename: objKey, filetype: file.type },   // ← ★ добавили
-      headers:{
-        'x-upsert':'true',
-        'authorization':`Bearer ${SUPABASE_KEY}`
-      },
-      onProgress(bytesSent,bytesTotal){
-        const pct=(bytesSent/bytesTotal*100).toFixed(0);
-        filesBox.innerHTML =
-          `<div class="file-item">
-             <span>${file.name}</span><span>${pct}%</span>
-           </div>`;
-      },
-      onSuccess(){ afterUpload(objKey); },
-      onError(e){ alert('Ошибка загрузки: '+e); }
-    });
-    upload.start();
-  }
+  const upload = new tus.Upload(file, {
+    endpoint,
+    chunkSize: 8 * 1024 * 1024,
+    metadata: {            // ← обязательные meta‑данные для Supabase
+      filename: objKey,
+      filetype: file.type || 'application/octet-stream'
+    },
+    headers: {
+      'x-upsert': 'true',
+      'authorization': `Bearer ${SUPABASE_KEY}`  // anon key
+    },
+    onProgress (sent, total) {
+      const pct = (sent / total * 100).toFixed(0);
+      filesBox.innerHTML =
+        `<div class="file-item"><span>${file.name}</span><span>${pct}%</span></div>`;
+    },
+    onSuccess () { afterUpload(objKey); },
+    onError   (e) { alert('Ошибка загрузки: ' + e); }
+  });
+
+  upload.start();
+}
+
 
   async function afterUpload(key){
     const { data,rowErr } = await supabase
