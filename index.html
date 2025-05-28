@@ -130,24 +130,29 @@
   const endpoint = `${SUPABASE_URL}/storage/v1/upload/resumable`;
 
   const upload = new tus.Upload(file, {
-     endpoint,
-     chunkSize: 8 * 1024 * 1024,
+  endpoint,
+  chunkSize: 8 * 1024 * 1024,
+  metadata: {
+    filename: objKey,
+    filetype: file.type || 'application/octet-stream'
+  },
+  headers: {
+    'x-upsert': 'true',
+    authorization: `Bearer ${SUPABASE_KEY}`
+  },
 
-    metadata : {
-      bucketName : 'user-uploads',             
-      objectName : objKey,                      
-      contentType: file.type || 'application/octet-stream'
-    },
+  // ───── исправлено:
+  onProgress(sent, total) {
+    const pct = Math.round(sent / total * 100);
+    filesBox.innerHTML =
+      `<div class="file-item">
+         <span>${file.name}</span><span>${pct}%</span>
+       </div>`;
+  },
 
-     headers  : {
-       'x-upsert'    : 'true',
-       'authorization': `Bearer ${SUPABASE_KEY}`
-     },
-
-     onProgress (sent,total){ … },
-     onSuccess ()         { afterUpload(objKey); },
-     onError   (e)        { alert('Ошибка загрузки: '+e); }
-  });
+  onSuccess()  { afterUpload(objKey); },
+  onError(e)   { alert('Ошибка загрузки: ' + e); }
+});
 
   upload.start();
 }
