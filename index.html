@@ -178,41 +178,53 @@
     }
 
     /* ---------- отправка ---------- */
-    async function uploadAndSend(){
-      const file = fileInput.files[0];
-      if(!file){ alert('Выберите файл'); return; }
+    async function uploadAndSend () {
+  const file = fileInput.files[0];
+  if (!file) { alert('Выберите файл'); return; }
 
-      const path = `${Date.now()}_${safeName(file.name)}`;
+  const path = `${Date.now()}_${safeName(file.name)}`;
 
-      /* 1. upload в Storage */
-      const { error:upErr } = await supabase
-        .storage.from('user-uploads')
-        .upload(path, file, { upsert:true });
-      if(upErr){ alert('Ошибка загрузки: '+upErr.message); return; }
+  /* 1. резюмируемый upload */
+  const uploader = await supabase
+    .storage.from('user-uploads')
+    .createResumableUpload(path, file, {
+      chunkSize : 10 * 1024 * 1024,     // 10 MB
+      upsert    : true,
+      contentType: file.type,
+      onProgress: p => {                     // красивый прогресс
+        filesBox.innerHTML = `
+          <div class="file-item">
+            <span>${file.name}</span>
+            <span>${(p*100).toFixed(0)} %</span>
+          </div>`;
+      }
+    });
+
+  const { error: upErr } = await uploader.finalize();
+  if (upErr) { alert('Ошибка загрузки: ' + upErr.message); return; }
 
       /* 2. insert row */
       const { data:reqRow, error:insErr } = await supabase
-        .from('requests')
-        .insert({ file_path:path, status:'pending' })
-        .select()
-        .single();
-      if(insErr){ alert(insErr.message); return; }
+    .from('requests')
+    .insert({ file_path: path, status: 'pending' })
+    .select()
+    .single();
+  if (insErr) { alert(insErr.message); return; }
 
       /* 3. invoke Edge Function */
-      try{
-        const res = await fetch(FUNCTIONS_URL,{
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({ request_id:reqRow.id })
-        });
-        if(!res.ok) console.error('Edge Function error:', await res.text());
-      }catch(err){ console.error(err); }
+      try {
+    const res = await fetch(FUNCTIONS_URL, {
+      method : 'POST',
+      headers: { 'Content-Type':'application/json' },
+      body   : JSON.stringify({ request_id: reqRow.id })
+    });
+    if (!res.ok) console.error('Edge Function error:', await res.text());
+  } catch (err) { console.error(err); }
 
-      /* 4. refresh history */
-      await loadHistory();
-      /* reset UI */
-      fileInput.value=''; filesBox.innerHTML=''; sendBtn.disabled=true;
-    }
+  /* 4. UI */
+  await loadHistory();
+  fileInput.value = ''; filesBox.innerHTML = ''; sendBtn.disabled = true;
+}
 
     sendBtn.addEventListener('click', uploadAndSend);
     loadHistory();
