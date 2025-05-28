@@ -133,6 +133,7 @@
     const upload = new tus.Upload(file,{
       endpoint,
       chunkSize: 8*1024*1024,
+      metadata: { filename: objKey, filetype: file.type },   // ← ★ добавили
       headers:{
         'x-upsert':'true',
         'authorization':`Bearer ${SUPABASE_KEY}`
