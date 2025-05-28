@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Подбор оборудования</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>Подбор оборудования (stub‑login)</title>
 
   <!-- Supabase JS SDK -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -36,28 +36,14 @@
 </head>
 
 <body>
-  <!-- █ 1. Модальное окно авторизации █ -->
-  <dialog id="auth-dlg">
-    <h3>Вход</h3>
-    <p style="font-size:14px;color:#666">
-      Укажите e‑mail — мы пришлём&nbsp;ссылку для входа
-    </p>
-    <input id="auth-email" type="email" placeholder="you@example.com" required />
-    <button id="auth-btn">Получить ссылку</button>
-    <p id="auth-msg" style="font-size:13px;color:#28a745;display:none;text-align:center">
-      ✔ Проверяйте почту!
-    </p>
-  </dialog>
 
-  <!-- █ 2. Загрузчик / история █ -->
+  <!-- ▸ Зона загрузки и история -->
   <div class="uploader">
-    <!-- drop‑zone -->
     <label id="dropzone" class="dropzone">
       <input id="file-input" type="file"
              accept=".pdf,.doc,.docx,.txt,.xlsx,.zip"
-             style="position:absolute;inset:0;opacity:0;cursor:pointer" />
+             style="position:absolute;inset:0;opacity:0;cursor:pointer">
       <div style="pointer-events:none">
-        <!-- иконка -->
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
              stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="16 16 12 12 8 16"></polyline>
@@ -70,9 +56,7 @@
     </label>
 
     <div id="files" class="files"></div>
-    <button id="send-btn" class="send-btn" disabled>
-      Отправить на подбор оборудования
-    </button>
+    <button id="send-btn" class="send-btn" disabled>Отправить на подбор оборудования</button>
 
     <div class="history">
       <h2>История запросов</h2>
@@ -83,35 +67,39 @@
     </div>
   </div>
 
+<script type="module">
 
 <script type="module">
 /* ───── 1. Supabase init ───── */
 const SUPABASE_URL  = 'https://nnelvjvcxqugsevbykfn.supabase.co';
 const SUPABASE_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5uZWx2anZjeHF1Z3NldmJ5a2ZuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgzNzI1NzcsImV4cCI6MjA2Mzk0ODU3N30.hTaareGOoQ4Mp9ft3HfNmktqSGb9l2Ie4TGyE1X-ibI';
 const FN_URL = 'https://nnelvjvcxqugsevbykfn.supabase.co/functions/v1/equip-selector';
-const sb            = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-/* ───── 2. DOM ───── */
-const dlgAuth  = document.getElementById('auth-dlg');
-const emailInp = document.getElementById('auth-email');
-const authBtn  = document.getElementById('auth-btn');
-const authMsg  = document.getElementById('auth-msg');
+const PRESET_EMAIL    = 'alchemist8931@example.com';
+const PRESET_PASSWORD = 'demo1234';
 
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
+  auth: { persistSession: true }
+});
+
+await ensureStubSession();        // ← сразу пытаемся войти
+
+/* ───────── 2. DOM ───────── */
 const dropzone = document.getElementById('dropzone');
 const fileInput= document.getElementById('file-input');
 const filesBox = document.getElementById('files');
 const sendBtn  = document.getElementById('send-btn');
 const tbody    = document.querySelector('#historyTable tbody');
 
-/* ───── 3. helpers ───── */
+/* ───────── 3. helpers ───────── */
 const safeName = n => n.normalize('NFKD')
                        .replace(/[\u0300-\u036f]/g,'')
                        .replace(/[^a-zA-Z0-9._-]/g,'_');
 
-function preview(file){
+function preview(f){
   filesBox.innerHTML =
-    `<div class="file-item"><span>${file.name}</span>
-     <span>${(file.size/1_048_576).toFixed(2)} МБ</span></div>`;
+    `<div class="file-item"><span>${f.name}</span>
+     <span>${(f.size/1_048_576).toFixed(2)} МБ</span></div>`;
   sendBtn.disabled = false;
 }
 
@@ -121,37 +109,13 @@ function preview(file){
 ['dragleave','drop'].forEach(evt =>
   dropzone.addEventListener(evt,e=>{e.preventDefault();dropzone.classList.remove('dragover');}));
 dropzone.addEventListener('drop', e=>{
-  const f=e.dataTransfer.files[0]; if(f){ fileInput.files=e.dataTransfer.files; preview(f);}
+  const f=e.dataTransfer.files[0]; if(f){ fileInput.files=e.dataTransfer.files; preview(f); }
 });
 fileInput.addEventListener('change', e=>{
   const f=e.target.files[0]; if(f) preview(f);
 });
 
-/* ─── 4. Авторизация ────────────────────────────────────────────────*/
-async function checkSession(){
-  const { data:{ session } } = await sb.auth.getSession();
-  if(session){ dlgAuth.close(); loadHistory(); }
-  else        dlgAuth.showModal();
-}
-
-authBtn.addEventListener('click', async ()=>{
-  const email = emailInp.value.trim();
-  if(!email){ alert('Введите e‑mail'); return; }
-
-  const { error } = await sb.auth.signInWithOtp({ email, options:{ emailRedirectTo: location.href }});
-  if(error){ alert(error.message); return; }
-
-  authMsg.style.display='block';
-  authBtn.disabled = true;
-});
-
-/* после перехода по magic‑link пользователь
-   попадёт на эту же страницу с access‑token в URL */
-sb.auth.onAuthStateChange((_ev,session)=>{
-  if(session){ dlgAuth.close(); loadHistory(); }
-});
-
-/* ─── 5. История ────────────────────────────────────────────────────*/
+/* ───────── 4. История ───────── */
 async function loadHistory(){
   tbody.innerHTML = '';
   const { data:{ user } } = await sb.auth.getUser();
@@ -180,14 +144,14 @@ async function loadHistory(){
   });
 }
 
-/* ─── 6. Загрузка и вызов Edge‑функции ─────────────────────────────*/
+/* ───────── 5. Загрузка + Edge‑function ───────── */
 async function uploadAndSend(){
   const file = fileInput.files[0];
   if(!file){ alert('Выберите файл'); return; }
   if(file.size > 50*1024*1024){ alert('>50 МБ — не загружаем'); return; }
 
   const { data:{ user } } = await sb.auth.getUser();
-  if(!user){ alert('Сначала войдите'); dlgAuth.showModal(); return; }
+  if(!user){ alert('Авто‑авторизация не сработала'); return; }
 
   /* 1) upload */
   const key = `${Date.now()}_${safeName(file.name)}`;
@@ -202,7 +166,7 @@ async function uploadAndSend(){
     .select().single();
   if(rowErr){ alert(rowErr.message); return; }
 
-  /* 3) invoke Edge Function */
+  /* 3) Edge function */
   try{
     const r = await fetch(FN_URL,{
       method:'POST',
@@ -217,10 +181,37 @@ async function uploadAndSend(){
   loadHistory();
 }
 
-/* ─── 7. События ───────────────────────────────────────────────────*/
 sendBtn.addEventListener('click', uploadAndSend);
-/* визуал drag‑n‑drop — оставляем как было (сокращено) */
-checkSession();
+loadHistory();
+
+/* ───────── 6. «Заглушка» авторизации ───────── */
+async function ensureStubSession(){
+  /* уже есть сессия? */
+  let { data:{ session } } = await sb.auth.getSession();
+  if(session) return;
+
+  /* пробуем войти */
+  let { error } = await sb.auth.signInWithPassword({
+    email: PRESET_EMAIL,
+    password: PRESET_PASSWORD
+  });
+
+  /* если логин не найден — создаём пользователя
+     (доступно только при выключенном e‑mail‑confirm) */
+  if(error && error.status === 400){
+    const { error:upErr } = await sb.auth.signUp({
+      email: PRESET_EMAIL,
+      password: PRESET_PASSWORD
+    });
+    if(upErr){ console.error('signUp:', upErr.message); return; }
+
+    /* повторяем вход */
+    await sb.auth.signInWithPassword({
+      email: PRESET_EMAIL,
+      password: PRESET_PASSWORD
+    });
+  }
+}
 </script>
 </body>
 </html>
