@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Подбор оборудования (stub‑login)</title>
 
   <!-- Supabase SDK -->
@@ -71,7 +71,7 @@
 
 <!-- ───────── Основной модуль ───────── -->
 <script type="module">
-
+  
 /* ───── 1. Supabase init ───── */
 const SUPABASE_URL  = 'https://nnelvjvcxqugsevbykfn.supabase.co';
 const SUPABASE_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5uZWx2anZjeHF1Z3NldmJ5a2ZuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgzNzI1NzcsImV4cCI6MjA2Mzk0ODU3N30.hTaareGOoQ4Mp9ft3HfNmktqSGb9l2Ie4TGyE1X-ibI';
@@ -81,17 +81,17 @@ const PRESET_EMAIL    = 'alchemist8931@example.com';
 const PRESET_PASSWORD = 'demo1234';
 
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
-  auth: { persistSession:true }
+  auth:{ persistSession:true }
 });
 
-/* 2. DOM */
+/* 2. DOM */
 const dropzone = document.getElementById('dropzone');
 const fileInput= document.getElementById('file-input');
 const filesBox = document.getElementById('files');
 const sendBtn  = document.getElementById('send-btn');
 const tbody    = document.querySelector('#historyTable tbody');
 
-/* 3. utils */
+/* 3. helpers */
 const safeName = n => n.normalize('NFKD')
                        .replace(/[\u0300-\u036f]/g,'')
                        .replace(/[^a-zA-Z0-9._-]/g,'_');
@@ -103,11 +103,13 @@ function preview(f){
   sendBtn.disabled = false;
 }
 
-/* 4. drag‑n‑drop UX */
-['dragenter','dragover'].forEach(evt =>
-  dropzone.addEventListener(evt,e=>{e.preventDefault();dropzone.classList.add('dragover');}));
-['dragleave','drop'].forEach(evt =>
-  dropzone.addEventListener(evt,e=>{e.preventDefault();dropzone.classList.remove('dragover');}));
+/* drag‑n‑drop UX */
+['dragenter','dragover'].forEach(e=>dropzone.addEventListener(e,ev=>{
+  ev.preventDefault(); dropzone.classList.add('dragover');
+}));
+['dragleave','drop'].forEach(e=>dropzone.addEventListener(e,ev=>{
+  ev.preventDefault(); dropzone.classList.remove('dragover');
+}));
 dropzone.addEventListener('drop', e=>{
   const f=e.dataTransfer.files[0]; if(f){ fileInput.files=e.dataTransfer.files; preview(f); }
 });
@@ -115,7 +117,7 @@ fileInput.addEventListener('change', e=>{
   const f=e.target.files[0]; if(f) preview(f);
 });
 
-/* 5. история */
+/* 4. история */
 async function loadHistory(){
   tbody.innerHTML='';
   const { data:{ user } } = await sb.auth.getUser();
@@ -125,9 +127,9 @@ async function loadHistory(){
     .from('requests')
     .select('*')
     .eq('user_id', user.id)
-    .order('created_at',{ascending:false});
+    .order('created_at',{ ascending:false });
 
-  if(error){ console.error(error); return;}
+  if(error){ console.error(error); return; }
 
   data.forEach(r=>{
     const url = r.response_path
@@ -144,16 +146,17 @@ async function loadHistory(){
   });
 }
 
-/* 6. upload → insert → Edge‑Function */
+/* 5. upload → insert → Edge Function */
 async function uploadAndSend(){
-  const file=fileInput.files[0];
+  const file = fileInput.files[0];
   if(!file){ alert('Выберите файл'); return; }
-  if(file.size>50*1024*1024){ alert('>50 МБ — не загружаем'); return;}
+  if(file.size > 50*1024*1024){ alert('>50 МБ — не загружаем'); return; }
 
   const { data:{ user } } = await sb.auth.getUser();
-  if(!user){ alert('Авторизация не удалась'); return; }
+  if(!user){ alert('Сессии нет, перезагрузите страницу'); return; }
 
   const key = `${Date.now()}_${safeName(file.name)}`;
+
   const { error:upErr } = await sb.storage.from('user-uploads')
                          .upload(key, file, { upsert:true });
   if(upErr){ alert('Upload: '+upErr.message); return; }
@@ -167,7 +170,7 @@ async function uploadAndSend(){
   try{
     const r = await fetch(FN_URL,{
       method:'POST',
-      headers:{'Content-Type':'application/json'},
+      headers:{ 'Content-Type':'application/json' },
       body: JSON.stringify({ request_id:reqRow.id })
     });
     if(!r.ok) console.error('Edge Function:', await r.text());
@@ -179,27 +182,18 @@ async function uploadAndSend(){
 
 sendBtn.addEventListener('click', uploadAndSend);
 
-/* 7. stub‑login — создаём/входим и грузим историю */
+/* 6. stub‑login: ТОЛЬКО sign‑in */
 (async function ensureStubSession(){
-  let { data:{ session } } = await sb.auth.getSession();
+  const { data:{ session } } = await sb.auth.getSession();
   if(!session){
-    let { error } = await sb.auth.signInWithPassword({
+    const { error } = await sb.auth.signInWithPassword({
       email: PRESET_EMAIL,
       password: PRESET_PASSWORD
     });
-    /* если пользователь ещё не создан – создаём и входим */
-    if(error && error.status===400){
-      const { error:upErr } = await sb.auth.signUp({
-        email: PRESET_EMAIL,
-        password: PRESET_PASSWORD,
-        options:{ emailRedirectTo: location.href }
-      });
-      if(upErr){ console.error('signUp:',upErr.message); return;}
-
-      await sb.auth.signInWithPassword({
-        email: PRESET_EMAIL,
-        password: PRESET_PASSWORD
-      });
+    if(error){
+      console.error('stub‑login error:', error.message);
+      alert('stub‑login: '+error.message);
+      return;               /* приложение не запускаем */
     }
   }
   loadHistory();
