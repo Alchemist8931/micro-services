@@ -213,15 +213,17 @@ async function uploadAndSend() {
 
   // 6.3. Вызов Edge‑Function через встроенный метод invoke
   try {
-    const { data: funcRes, error: funcErr } = await sb.functions.invoke(FUNCTION_NAME, {
-  body: JSON.stringify({ request_id: reqRow.id })
-});
-    if (funcErr) {
-      console.error('Edge Function error:', funcErr);
-    }
-  } catch (e) {
-    console.error('Edge Function fetch failed:', e);
+  const { data: funcRes, error: funcErr } = await sb.functions.invoke(FUNCTION_NAME, {
+    body: JSON.stringify({ request_id: reqRow.id })
+  });
+  if (funcErr) {
+    console.error("Edge Function вернула ошибку:", funcErr);
+    return;
   }
+  console.log("Edge Function вернула данные:", funcRes);
+} catch (e) {
+  console.error("Не удалось вызвать функцию:", e);
+}
 
   // 6.4. Сброс интерфейса и обновление истории
   fileInput.value = '';
