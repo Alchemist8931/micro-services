@@ -180,22 +180,22 @@ async function uploadAndSend(){
 sendBtn.addEventListener('click', uploadAndSend);
 
 /* 7. stub‑login: только sign‑in ↓ */
-async function ensureStubSession(){
-   const { data:{ session } } = await sb.auth.getSession();
-   if(!session){
+    (async () => {
+      const { data: { session } } = await sb.auth.getSession();
+      if (!session) {
+        const { error } = await sb.auth.signInWithPassword({
+          email: PRESET_EMAIL,
+          password: PRESET_PASSWORD
+        });
+        if (error) {
+          console.error('stub‑login error:', error.message);
+          alert('stub‑login: ' + error.message);
+          return;  /* приложение дальше не работает */
+        }
+      }
+      loadHistory();
+    })();
 
-    const { error } = await sb.auth.signInWithPassword({
-      email: PRESET_EMAIL,
-      password: PRESET_PASSWORD
-    });
-    if(error){
-      console.error('stub‑login error:', error.message);
-      alert('stub‑login: '+error.message);
-      return;
-    }
-   }
-   loadHistory();
- }();
-</script>
+  </script>
 </body>
 </html>
