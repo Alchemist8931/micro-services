@@ -77,7 +77,7 @@ const SUPABASE_URL  = 'https://nnelvjvcxqugsevbykfn.supabase.co';
 const SUPABASE_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5uZWx2anZjeHF1Z3NldmJ5a2ZuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgzNzI1NzcsImV4cCI6MjA2Mzk0ODU3N30.hTaareGOoQ4Mp9ft3HfNmktqSGb9l2Ie4TGyE1X-ibI';
 const FN_URL = 'https://nnelvjvcxqugsevbykfn.supabase.co/functions/v1/equip-selector';
 
-   /* Жёстко прописанный user_id */
+ /* Жёстко прописанный user_id (идентификатор вашего “stub”‑пользователя) */
 const HARDCODED_USER_ID = 'c662ca35-8d67-4f99-a484-d2ebdf6c98eb';
 
 const sb = window.supabase.createClient(
@@ -86,26 +86,28 @@ const sb = window.supabase.createClient(
   { auth: { persistSession: true } }
 );
 
-/* 2. DOM ↓ */
+/* 2. DOM-элементы */
 const dropzone  = document.getElementById('dropzone');
 const fileInput = document.getElementById('file-input');
 const filesBox  = document.getElementById('files');
 const sendBtn   = document.getElementById('send-btn');
 const tbody     = document.querySelector('#historyTable tbody');
 
-/* 3. helpers ↓ */
+/* 3. Вспомогательные функции */
 const safeName = n => n.normalize('NFKD')
                        .replace(/[\u0300-\u036f]/g, '')
                        .replace(/[^a-zA-Z0-9._-]/g, '_');
 
 function preview(f) {
   filesBox.innerHTML =
-    `<div class="file-item"><span>${f.name}</span>
-     <span>${(f.size/1_048_576).toFixed(2)} МБ</span></div>`;
+    `<div class="file-item">
+       <span>${f.name}</span>
+       <span>${(f.size / 1_048_576).toFixed(2)} МБ</span>
+     </div>`;
   sendBtn.disabled = false;
 }
 
-/* 4. drag‑n‑drop визуал ↓ */
+/* 4. Drag‑n‑drop визуал */
 ['dragenter','dragover'].forEach(evt =>
   dropzone.addEventListener(evt, ev => {
     ev.preventDefault();
@@ -130,9 +132,11 @@ fileInput.addEventListener('change', e => {
   if (f) preview(f);
 });
 
-/* 5. История ↓ */
+/* 5. Загрузка истории текущих запросов */
 async function loadHistory() {
   tbody.innerHTML = '';
+
+  // Используем жёстко прописанный HARDCODED_USER_ID
   const userId = HARDCODED_USER_ID;
 
   const { data, error } = await sb
@@ -145,10 +149,12 @@ async function loadHistory() {
     console.error(error);
     return;
   }
+
   data.forEach(r => {
-    // получаем публичный URL (bucket уже должен быть public=false → public=true)
     const url = r.response_path
-      ? sb.storage.from('user-uploads').getPublicUrl(r.response_path).data.publicUrl
+      ? sb.storage
+          .from('user-uploads')
+          .getPublicUrl(r.response_path).data.publicUrl
       : null;
     tbody.insertAdjacentHTML('beforeend', `
       <tr>
@@ -160,7 +166,7 @@ async function loadHistory() {
   });
 }
 
-/* 6. Загрузка файла + Edge Function ↓ */
+/* 6. Загрузка файла в Storage + вставка записи в requests + вызов Edge‑Function */
 async function uploadAndSend() {
   const file = fileInput.files[0];
   if (!file) {
@@ -168,46 +174,58 @@ async function uploadAndSend() {
     return;
   }
   if (file.size > 50 * 1024 * 1024) {
-    alert('>50 МБ — не загружаем');
+    alert('>50 МБ — не загружаем');
     return;
   }
 
+  // Жёстко прописанный user_id
   const userId = HARDCODED_USER_ID;
+
+  // Сформируем безопасный ключ для хранения
   const key = `${Date.now()}_${safeName(file.name)}`;
 
-  // 6.1. Загрузка в storage
-  const { error: upErr } = await sb.storage
+  // 6.1. Загрузка в Supabase Storage
+  const { error: upErr } = await sb
+    .storage
     .from('user-uploads')
     .upload(key, file, { upsert: true });
+
   if (upErr) {
     alert('Upload: ' + upErr.message);
     return;
   }
 
-  // 6.2. Вставка в таблицу requests
+  // 6.2. Вставка новой строки в таблицу requests
   const { data: reqRow, error: rowErr } = await sb
     .from('requests')
-    .insert({ user_id: userId, file_path: key, status: 'pending' })
+    .insert({
+      user_id: userId,
+      file_path: key,
+      status: 'pending'
+    })
     .select()
     .single();
+
   if (rowErr) {
     alert(rowErr.message);
     return;
   }
 
-  // 6.3. Вызов Edge‑Function (не дожидаемся результата)
+  // 6.3. Вызов Edge‑Function (не дожидаемся ответа)
   try {
     const r = await fetch(FN_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ request_id: reqRow.id })
     });
-    if (!r.ok) console.error('Edge Function:', await r.text());
+    if (!r.ok) {
+      console.error('Edge Function:', await r.text());
+    }
   } catch (e) {
     console.error(e);
   }
 
-  // 6.4. Сброс UI
+  // 6.4. Сброс интерфейса и обновление истории
   fileInput.value = '';
   filesBox.innerHTML = '';
   sendBtn.disabled = true;
@@ -216,8 +234,9 @@ async function uploadAndSend() {
 
 sendBtn.addEventListener('click', uploadAndSend);
 
-/* 7. Загрузка истории сразу при старте ↓ */
+/* 7. При старте загружаем историю ↓ */
 loadHistory();
+
 </script>
 </body>
 </html>
