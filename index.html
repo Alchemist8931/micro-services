@@ -75,9 +75,9 @@
 /* ───── 1. Supabase init ───── */
 const SUPABASE_URL  = 'https://nnelvjvcxqugsevbykfn.supabase.co';
 const SUPABASE_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5uZWx2anZjeHF1Z3NldmJ5a2ZuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgzNzI1NzcsImV4cCI6MjA2Mzk0ODU3N30.hTaareGOoQ4Mp9ft3HfNmktqSGb9l2Ie4TGyE1X-ibI';
-const FN_URL = 'https://nnelvjvcxqugsevbykfn.supabase.co/functions/v1/equip-selector';
+const FUNCTION_NAME = 'https://nnelvjvcxqugsevbykfn.supabase.co/functions/v1/equip-selector';
 
- /* Жёстко прописанный user_id (идентификатор вашего “stub”‑пользователя) */
+/* Жёстко прописанный user_id (ваш “stub”‑пользователь) */
 const HARDCODED_USER_ID = 'c662ca35-8d67-4f99-a484-d2ebdf6c98eb';
 
 const sb = window.supabase.createClient(
@@ -86,14 +86,14 @@ const sb = window.supabase.createClient(
   { auth: { persistSession: true } }
 );
 
-/* 2. DOM-элементы */
+/* 2. DOM-элементы ↓ */
 const dropzone  = document.getElementById('dropzone');
 const fileInput = document.getElementById('file-input');
 const filesBox  = document.getElementById('files');
 const sendBtn   = document.getElementById('send-btn');
 const tbody     = document.querySelector('#historyTable tbody');
 
-/* 3. Вспомогательные функции */
+/* 3. Вспомогательные функции ↓ */
 const safeName = n => n.normalize('NFKD')
                        .replace(/[\u0300-\u036f]/g, '')
                        .replace(/[^a-zA-Z0-9._-]/g, '_');
@@ -107,7 +107,7 @@ function preview(f) {
   sendBtn.disabled = false;
 }
 
-/* 4. Drag‑n‑drop визуал */
+/* 4. Drag‑n‑drop визуал ↓ */
 ['dragenter','dragover'].forEach(evt =>
   dropzone.addEventListener(evt, ev => {
     ev.preventDefault();
@@ -132,7 +132,7 @@ fileInput.addEventListener('change', e => {
   if (f) preview(f);
 });
 
-/* 5. Загрузка истории текущих запросов */
+/* 5. Загрузка истории текущих запросов ↓ */
 async function loadHistory() {
   tbody.innerHTML = '';
 
@@ -166,7 +166,7 @@ async function loadHistory() {
   });
 }
 
-/* 6. Загрузка файла в Storage + вставка записи в requests + вызов Edge‑Function */
+/* 6. Загрузка файла в Storage + вставка записи в requests + вызов Edge‑Function ↓ */
 async function uploadAndSend() {
   const file = fileInput.files[0];
   if (!file) {
@@ -211,18 +211,16 @@ async function uploadAndSend() {
     return;
   }
 
-  // 6.3. Вызов Edge‑Function (не дожидаемся ответа)
+  // 6.3. Вызов Edge‑Function через встроенный метод invoke
   try {
-    const r = await fetch(FN_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+    const { data: funcRes, error: funcErr } = await sb.functions.invoke(FUNCTION_NAME, {
       body: JSON.stringify({ request_id: reqRow.id })
     });
-    if (!r.ok) {
-      console.error('Edge Function:', await r.text());
+    if (funcErr) {
+      console.error('Edge Function error:', funcErr);
     }
   } catch (e) {
-    console.error(e);
+    console.error('Edge Function fetch failed:', e);
   }
 
   // 6.4. Сброс интерфейса и обновление истории
