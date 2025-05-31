@@ -214,8 +214,8 @@ async function uploadAndSend() {
   // 6.3. Вызов Edge‑Function через встроенный метод invoke
   try {
     const { data: funcRes, error: funcErr } = await sb.functions.invoke(FUNCTION_NAME, {
-      body: JSON.stringify({ request_id: reqRow.id })
-    });
+  body: JSON.stringify({ request_id: reqRow.id })
+});
     if (funcErr) {
       console.error('Edge Function error:', funcErr);
     }
