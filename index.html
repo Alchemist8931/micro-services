@@ -5,26 +5,38 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Подбор оборудования (stub‑login)</title>
 
-  <!-- Supabase SDK -->
+  <!-- Supabase SDK -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
   <style>
     *,*::before,*::after{box-sizing:border-box}
     body{margin:0;font-family:Inter,Arial,sans-serif;background:#f5f5f5;
          display:flex;justify-content:center;min-height:100vh;padding:2rem}
+
+    /* Основной контейнер */
     .uploader{width:820px;max-width:100%;background:#fff;border-radius:24px;padding:32px;
               box-shadow:0 4px 24px rgba(0,0,0,.08)}
+
+    /* Зона Drag‑n‑drop */
     .dropzone{position:relative;border:2px dashed #d9d9d9;border-radius:16px;padding:48px 24px;
               text-align:center;cursor:pointer;transition:background .2s}
     .dropzone.dragover{background:#fafafa}
     .dropzone svg{width:48px;height:48px;color:#8c8c8c}
     .dropzone p{margin:12px 0 0;font-size:14px;color:#8c8c8c}
+
+    /* Список файлов */
     .files{margin-top:24px}
-    .file-item{display:flex;justify-content:space-between;align-items:center;border:1px solid #eee;
-               border-radius:12px;padding:12px 16px;margin-bottom:12px;font-size:14px}
-    .send-btn{width:100%;padding:14px;margin-top:8px;border:none;border-radius:12px;background:#000;
-              color:#fff;font-size:16px;font-weight:600;cursor:pointer;transition:opacity .2s}
+    .file-item{display:flex;justify-content:space-between;align-items:center;
+               border:1px solid #eee;border-radius:12px;padding:12px 16px;
+               margin-bottom:12px;font-size:14px}
+
+    /* Кнопка отправки */
+    .send-btn{width:100%;padding:14px;margin-top:8px;border:none;
+              border-radius:12px;background:#000;color:#fff;font-size:16px;
+              font-weight:600;cursor:pointer;transition:opacity .2s}
     .send-btn:disabled{opacity:.35;cursor:not-allowed}
+
+    /* История запросов */
     .history{margin-top:40px}
     .history h2{font-size:16px;margin:0 0 12px;color:#333}
     table{width:100%;border-collapse:collapse;font-size:14px}
@@ -32,6 +44,52 @@
     th{text-align:left;background:#fafafa}
     a{color:#0066cc;text-decoration:none}
     a:hover{text-decoration:underline}
+
+    /* Кнопка «Просмотреть» */
+    .view-btn{
+      padding:4px 8px;border:none;border-radius:6px;
+      background:#0066cc;color:#fff;font-size:12px;cursor:pointer;
+    }
+    .view-btn:hover{background:#005bb5}
+
+    /* Модальное окно */
+    #modal {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+    }
+    #modal.hidden { display: none; }
+    #modal .modal-content {
+      background: #fff;
+      border-radius: 12px;
+      max-width: 90%;
+      max-height: 90%;
+      width: 700px;
+      padding: 24px;
+      position: relative;
+      overflow: auto;
+      box-shadow: 0 4px 24px rgba(0,0,0,.1);
+    }
+    #modal-close {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      background: transparent;
+      border: none;
+      font-size: 20px;
+      cursor: pointer;
+    }
+    #modal-text {
+      white-space: pre-wrap;
+      font-family: monospace;
+      font-size: 14px;
+      line-height: 1.4;
+      color: #333;
+    }
   </style>
 </head>
 
@@ -63,9 +121,24 @@
     <div class="history">
       <h2>История запросов</h2>
       <table id="historyTable">
-        <thead><tr><th>Дата</th><th>Файл ТЗ</th><th>Статус</th><th>Ответ</th></tr></thead>
+        <thead>
+          <tr>
+            <th>Дата</th>
+            <th>Файл ТЗ</th>
+            <th>Статус</th>
+            <th>Ответ</th>
+          </tr>
+        </thead>
         <tbody></tbody>
       </table>
+    </div>
+  </div>
+
+  <!-- Модальное окно для просмотра ответа -->
+  <div id="modal" class="hidden">
+    <div class="modal-content">
+      <button id="modal-close">×</button>
+      <pre id="modal-text">Загрузка...</pre>
     </div>
   </div>
 
@@ -78,165 +151,223 @@ const SUPABASE_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 const FUNCTION_NAME = 'equip-selector';
 
 /* Жёстко прописанный user_id (ваш “stub”‑пользователь) */
-const HARDCODED_USER_ID = 'c662ca35-8d67-4f99-a484-d2ebdf6c98eb';
+    const HARDCODED_USER_ID = 'c662ca35-8d67-4f99-a484-d2ebdf6c98eb';
 
-const sb = window.supabase.createClient(
-  SUPABASE_URL,
-  SUPABASE_KEY,
-  { auth: { persistSession: true } }
-);
+    const sb = window.supabase.createClient(
+      SUPABASE_URL,
+      SUPABASE_KEY,
+      { auth: { persistSession: true } }
+    );
 
-/* 2. DOM-элементы ↓ */
-const dropzone  = document.getElementById('dropzone');
-const fileInput = document.getElementById('file-input');
-const filesBox  = document.getElementById('files');
-const sendBtn   = document.getElementById('send-btn');
-const tbody     = document.querySelector('#historyTable tbody');
+    /* 2. DOM-элементы ↓ */
+    const dropzone   = document.getElementById('dropzone');
+    const fileInput  = document.getElementById('file-input');
+    const filesBox   = document.getElementById('files');
+    const sendBtn    = document.getElementById('send-btn');
+    const tbody      = document.querySelector('#historyTable tbody');
+    const modal      = document.getElementById('modal');
+    const modalText  = document.getElementById('modal-text');
+    const modalClose = document.getElementById('modal-close');
 
-/* 3. Вспомогательные функции ↓ */
-const safeName = n => n.normalize('NFKD')
-                       .replace(/[\u0300-\u036f]/g, '')
-                       .replace(/[^a-zA-Z0-9._-]/g, '_');
+    /* 3. Вспомогательные функции ↓ */
+    const safeName = n => n.normalize('NFKD')
+                           .replace(/[\u0300-\u036f]/g, '')
+                           .replace(/[^a-zA-Z0-9._-]/g, '_');
 
-function preview(f) {
-  filesBox.innerHTML =
-    `<div class="file-item">
-       <span>${f.name}</span>
-       <span>${(f.size / 1_048_576).toFixed(2)} МБ</span>
-     </div>`;
-  sendBtn.disabled = false;
-}
+    function preview(f) {
+      filesBox.innerHTML =
+        `<div class="file-item">
+           <span>${f.name}</span>
+           <span>${(f.size / 1_048_576).toFixed(2)} МБ</span>
+         </div>`;
+      sendBtn.disabled = false;
+    }
 
-/* 4. Drag‑n‑drop визуал ↓ */
-['dragenter','dragover'].forEach(evt =>
-  dropzone.addEventListener(evt, ev => {
-    ev.preventDefault();
-    dropzone.classList.add('dragover');
-  })
-);
-['dragleave','drop'].forEach(evt =>
-  dropzone.addEventListener(evt, ev => {
-    ev.preventDefault();
-    dropzone.classList.remove('dragover');
-  })
-);
-dropzone.addEventListener('drop', e => {
-  const f = e.dataTransfer.files[0];
-  if (f) {
-    fileInput.files = e.dataTransfer.files;
-    preview(f);
-  }
-});
-fileInput.addEventListener('change', e => {
-  const f = e.target.files[0];
-  if (f) preview(f);
-});
+    /* 4. Drag‑n‑drop визуал ↓ */
+    ['dragenter','dragover'].forEach(evt =>
+      dropzone.addEventListener(evt, ev => {
+        ev.preventDefault();
+        dropzone.classList.add('dragover');
+      })
+    );
+    ['dragleave','drop'].forEach(evt =>
+      dropzone.addEventListener(evt, ev => {
+        ev.preventDefault();
+        dropzone.classList.remove('dragover');
+      })
+    );
+    dropzone.addEventListener('drop', e => {
+      const f = e.dataTransfer.files[0];
+      if (f) {
+        fileInput.files = e.dataTransfer.files;
+        preview(f);
+      }
+    });
+    fileInput.addEventListener('change', e => {
+      const f = e.target.files[0];
+      if (f) preview(f);
+    });
 
-/* 5. Загрузка истории текущих запросов ↓ */
-async function loadHistory() {
-  tbody.innerHTML = '';
+    /* Показать модальное окно с текстом */
+    function showModal(text) {
+      modalText.textContent = text;
+      modal.classList.remove('hidden');
+    }
+    /* Скрыть модальное окно */
+    function hideModal() {
+      modal.classList.add('hidden');
+      modalText.textContent = '';
+    }
 
-  // Используем жёстко прописанный HARDCODED_USER_ID
-  const userId = HARDCODED_USER_ID;
+    modalClose.addEventListener('click', hideModal);
+    // Если кликнули вне контента модалки — тоже закрыть
+    modal.addEventListener('click', e => {
+      if (e.target === modal) hideModal();
+    });
 
-  const { data, error } = await sb
-    .from('requests')
-    .select('*')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false });
+    /* 5. Загрузка истории текущих запросов ↓ */
+    async function loadHistory() {
+      tbody.innerHTML = '';
 
-  if (error) {
-    console.error(error);
-    return;
-  }
+      // Используем жёстко прописанный HARDCODED_USER_ID
+      const userId = HARDCODED_USER_ID;
 
-  data.forEach(r => {
-    const url = r.response_path
-      ? sb.storage
+      const { data, error } = await sb
+        .from('requests')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error(error);
+        return;
+      }
+
+      data.forEach(r => {
+        // Если есть response_path, то добавляем кнопку «Просмотреть»
+        let answerCell;
+        if (r.response_path) {
+          answerCell = `<td>
+            <button class="view-btn" data-path="${r.response_path}">
+              Просмотреть
+            </button>
+          </td>`;
+        } else {
+          answerCell = `<td>—</td>`;
+        }
+
+        tbody.insertAdjacentHTML('beforeend', `
+          <tr>
+            <td>${new Date(r.created_at).toLocaleString()}</td>
+            <td>${r.file_path}</td>
+            <td>${r.status}</td>
+            ${answerCell}
+          </tr>`);
+      });
+    }
+
+    /* 6. Загрузка файла в Storage + вставка записи в requests + вызов Edge‑Function ↓ */
+    async function uploadAndSend() {
+      const file = fileInput.files[0];
+      if (!file) {
+        alert('Выберите файл');
+        return;
+      }
+      if (file.size > 50 * 1024 * 1024) {
+        alert('>50 МБ — не загружаем');
+        return;
+      }
+
+      // Жёстко прописанный user_id
+      const userId = HARDCODED_USER_ID;
+      // Сформируем безопасный ключ для хранения
+      const key = `${Date.now()}_${safeName(file.name)}`;
+
+      // 6.1. Загрузка в Supabase Storage
+      const { error: upErr } = await sb
+        .storage
+        .from('user-uploads')
+        .upload(key, file, { upsert: true });
+
+      if (upErr) {
+        alert('Upload: ' + upErr.message);
+        return;
+      }
+
+      // 6.2. Вставка новой строки в таблицу requests
+      const { data: reqRow, error: rowErr } = await sb
+        .from('requests')
+        .insert({
+          user_id:   userId,
+          file_path: key,
+          status:    'pending'
+        })
+        .select()
+        .single();
+
+      if (rowErr) {
+        alert(rowErr.message);
+        return;
+      }
+
+      // 6.3. Вызов Edge‑Function через встроенный метод invoke
+      try {
+        const { data: funcRes, error: funcErr } = await sb.functions.invoke(FUNCTION_NAME, {
+          body: JSON.stringify({ request_id: reqRow.id })
+        });
+        if (funcErr) {
+          console.error("Edge Function вернула ошибку:", funcErr);
+        }
+        else {
+          console.log("Edge Function вернула данные:", funcRes);
+        }
+      } catch (e) {
+        console.error("Не удалось вызвать функцию:", e);
+      }
+
+      // 6.4. Сброс интерфейса и обновление истории
+      fileInput.value = '';
+      filesBox.innerHTML = '';
+      sendBtn.disabled = true;
+      loadHistory();
+    }
+
+    sendBtn.addEventListener('click', uploadAndSend);
+
+    /* 7. Делегирование клика по кнопкам «Просмотреть» в таблице */
+    document.body.addEventListener('click', async (e) => {
+      if (e.target.classList.contains('view-btn')) {
+        const path = e.target.getAttribute('data-path');
+        if (!path) return;
+
+        // "Публичный URL" для файла
+        const { data: urlData, error: urlErr } = sb
+          .storage
           .from('user-uploads')
-          .getPublicUrl(r.response_path).data.publicUrl
-      : null;
-    tbody.insertAdjacentHTML('beforeend', `
-      <tr>
-        <td>${new Date(r.created_at).toLocaleString()}</td>
-        <td>${r.file_path}</td>
-        <td>${r.status}</td>
-        <td>${url ? `<a href="${url}" target="_blank">CSV</a>` : '—'}</td>
-      </tr>`);
-  });
-}
+          .getPublicUrl(path);
 
-/* 6. Загрузка файла в Storage + вставка записи в requests + вызов Edge‑Function ↓ */
-async function uploadAndSend() {
-  const file = fileInput.files[0];
-  if (!file) {
-    alert('Выберите файл');
-    return;
-  }
-  if (file.size > 50 * 1024 * 1024) {
-    alert('>50 МБ — не загружаем');
-    return;
-  }
+        if (urlErr) {
+          console.error("Не удалось получить publicUrl:", urlErr);
+          showModal("Ошибка загрузки ответа");
+          return;
+        }
+        const publicUrl = urlData.publicUrl;
 
-  // Жёстко прописанный user_id
-  const userId = HARDCODED_USER_ID;
+        try {
+          // Загружаем текст по publicUrl
+          const resp = await fetch(publicUrl);
+          const text = await resp.text();
+          showModal(text);
+        } catch (err) {
+          console.error("Не удалось загрузить CSV‑текст:", err);
+          showModal("Ошибка загрузки ответа");
+        }
+      }
+    });
 
-  // Сформируем безопасный ключ для хранения
-  const key = `${Date.now()}_${safeName(file.name)}`;
+    /* 8. При старте загружаем историю ↓ */
+    loadHistory();
 
-  // 6.1. Загрузка в Supabase Storage
-  const { error: upErr } = await sb
-    .storage
-    .from('user-uploads')
-    .upload(key, file, { upsert: true });
-
-  if (upErr) {
-    alert('Upload: ' + upErr.message);
-    return;
-  }
-
-  // 6.2. Вставка новой строки в таблицу requests
-  const { data: reqRow, error: rowErr } = await sb
-    .from('requests')
-    .insert({
-      user_id: userId,
-      file_path: key,
-      status: 'pending'
-    })
-    .select()
-    .single();
-
-  if (rowErr) {
-    alert(rowErr.message);
-    return;
-  }
-
-  // 6.3. Вызов Edge‑Function через встроенный метод invoke
-  try {
-  const { data: funcRes, error: funcErr } = await sb.functions.invoke(FUNCTION_NAME, {
-    body: JSON.stringify({ request_id: reqRow.id })
-  });
-  if (funcErr) {
-    console.error("Edge Function вернула ошибку:", funcErr);
-    return;
-  }
-  console.log("Edge Function вернула данные:", funcRes);
-} catch (e) {
-  console.error("Не удалось вызвать функцию:", e);
-}
-
-  // 6.4. Сброс интерфейса и обновление истории
-  fileInput.value = '';
-  filesBox.innerHTML = '';
-  sendBtn.disabled = true;
-  loadHistory();
-}
-
-sendBtn.addEventListener('click', uploadAndSend);
-
-/* 7. При старте загружаем историю ↓ */
-loadHistory();
-
-</script>
+  </script>
 </body>
 </html>
