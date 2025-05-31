@@ -176,13 +176,12 @@ const FN_URL = 'https://nnelvjvcxqugsevbykfn.supabase.co/functions/v1/equip-sele
       const key = `${Date.now()}_${safeName(file.name)}`;
 
       // 6.1. Загрузка в storage
-      const { error: upErr } = await sb.storage
-        .from('user-uploads')
-        .upload(key, file, { upsert: true });
-      if (upErr) {
-        alert('Upload: ' + upErr.message);
-        return;
-      }
+      const { data: { signedUrl }, error: urlErr } = await sb
+  .storage
+  .from('user-uploads')
+  .createSignedUrl(r.response_path, 60);
+if (urlErr) { console.error(urlErr); return; }
+linkElement.href = signedUrl;
 
       // 6.2. Вставка в таблицу requests
       const { data: reqRow, error: rowErr } = await sb
