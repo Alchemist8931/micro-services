@@ -180,20 +180,23 @@ async function uploadAndSend(){
 sendBtn.addEventListener('click', uploadAndSend);
 
 /* 7. stub‑login: только sign‑in ↓ */
-(async function ensureStubSession(){
+(async function ensureStubSession () {
   const { data:{ session } } = await sb.auth.getSession();
-  if(!session){
-    const { error } = await sb.auth.signInWithPassword({
-      email: PRESET_EMAIL,
-      password: PRESET_PASSWORD
-    });
-    if(error){
-      console.error('stub‑login error:', error.message);
-      alert('stub‑login: '+error.message+
-            '\nПроверьте, что пароль «demo1234» действительно записан в auth.users');
-      return;             /* приложение дальше не работает */
-    }
+  if (session) { loadHistory(); return; }
+
+  const { error } = await sb.auth.signInWithPassword({
+    email: PRESET_EMAIL,
+    password: PRESET_PASSWORD
+  });
+
+  if (error) {
+    console.error('stub‑login error:', error.message);
+    alert('stub‑login: ' + error.message +
+          '\nЕсли видите «Invalid login credentials» — проверьте, '
+        + 'что хэш пароля в auth.users начинается с $2b$ и совпадает с «demo1234».');
+    return;           // дальше приложение не запускаем
   }
+
   loadHistory();
 })();
 </script>
