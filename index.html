@@ -77,147 +77,147 @@ const SUPABASE_URL  = 'https://nnelvjvcxqugsevbykfn.supabase.co';
 const SUPABASE_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5uZWx2anZjeHF1Z3NldmJ5a2ZuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgzNzI1NzcsImV4cCI6MjA2Mzk0ODU3N30.hTaareGOoQ4Mp9ft3HfNmktqSGb9l2Ie4TGyE1X-ibI';
 const FN_URL = 'https://nnelvjvcxqugsevbykfn.supabase.co/functions/v1/equip-selector';
 
-/* Жёстко прописанный user_id */
-    const HARDCODED_USER_ID = 'c662ca35-8d67-4f99-a484-d2ebdf6c98eb';
+   /* Жёстко прописанный user_id */
+const HARDCODED_USER_ID = 'c662ca35-8d67-4f99-a484-d2ebdf6c98eb';
 
-    const sb = window.supabase.createClient(
-      SUPABASE_URL,
-      SUPABASE_KEY,
-      { auth: { persistSession: true } }
-    );
+const sb = window.supabase.createClient(
+  SUPABASE_URL,
+  SUPABASE_KEY,
+  { auth: { persistSession: true } }
+);
 
-    /* 2. DOM ↓ */
-    const dropzone  = document.getElementById('dropzone');
-    const fileInput = document.getElementById('file-input');
-    const filesBox  = document.getElementById('files');
-    const sendBtn   = document.getElementById('send-btn');
-    const tbody     = document.querySelector('#historyTable tbody');
+/* 2. DOM ↓ */
+const dropzone  = document.getElementById('dropzone');
+const fileInput = document.getElementById('file-input');
+const filesBox  = document.getElementById('files');
+const sendBtn   = document.getElementById('send-btn');
+const tbody     = document.querySelector('#historyTable tbody');
 
-    /* 3. helpers ↓ */
-    const safeName = n => n.normalize('NFKD')
-                           .replace(/[\u0300-\u036f]/g, '')
-                           .replace(/[^a-zA-Z0-9._-]/g, '_');
+/* 3. helpers ↓ */
+const safeName = n => n.normalize('NFKD')
+                       .replace(/[\u0300-\u036f]/g, '')
+                       .replace(/[^a-zA-Z0-9._-]/g, '_');
 
-    function preview(f) {
-      filesBox.innerHTML =
-        `<div class="file-item"><span>${f.name}</span>
-         <span>${(f.size/1_048_576).toFixed(2)} МБ</span></div>`;
-      sendBtn.disabled = false;
-    }
+function preview(f) {
+  filesBox.innerHTML =
+    `<div class="file-item"><span>${f.name}</span>
+     <span>${(f.size/1_048_576).toFixed(2)} МБ</span></div>`;
+  sendBtn.disabled = false;
+}
 
-    /* 4. drag‑n‑drop визуал ↓ */
-    ['dragenter','dragover'].forEach(evt =>
-      dropzone.addEventListener(evt, ev => {
-        ev.preventDefault();
-        dropzone.classList.add('dragover');
-      })
-    );
-    ['dragleave','drop'].forEach(evt =>
-      dropzone.addEventListener(evt, ev => {
-        ev.preventDefault();
-        dropzone.classList.remove('dragover');
-      })
-    );
-    dropzone.addEventListener('drop', e => {
-      const f = e.dataTransfer.files[0];
-      if (f) {
-        fileInput.files = e.dataTransfer.files;
-        preview(f);
-      }
+/* 4. drag‑n‑drop визуал ↓ */
+['dragenter','dragover'].forEach(evt =>
+  dropzone.addEventListener(evt, ev => {
+    ev.preventDefault();
+    dropzone.classList.add('dragover');
+  })
+);
+['dragleave','drop'].forEach(evt =>
+  dropzone.addEventListener(evt, ev => {
+    ev.preventDefault();
+    dropzone.classList.remove('dragover');
+  })
+);
+dropzone.addEventListener('drop', e => {
+  const f = e.dataTransfer.files[0];
+  if (f) {
+    fileInput.files = e.dataTransfer.files;
+    preview(f);
+  }
+});
+fileInput.addEventListener('change', e => {
+  const f = e.target.files[0];
+  if (f) preview(f);
+});
+
+/* 5. История ↓ */
+async function loadHistory() {
+  tbody.innerHTML = '';
+  const userId = HARDCODED_USER_ID;
+
+  const { data, error } = await sb
+    .from('requests')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error(error);
+    return;
+  }
+  data.forEach(r => {
+    // получаем публичный URL (bucket уже должен быть public=false → public=true)
+    const url = r.response_path
+      ? sb.storage.from('user-uploads').getPublicUrl(r.response_path).data.publicUrl
+      : null;
+    tbody.insertAdjacentHTML('beforeend', `
+      <tr>
+        <td>${new Date(r.created_at).toLocaleString()}</td>
+        <td>${r.file_path}</td>
+        <td>${r.status}</td>
+        <td>${url ? `<a href="${url}" target="_blank">CSV</a>` : '—'}</td>
+      </tr>`);
+  });
+}
+
+/* 6. Загрузка файла + Edge Function ↓ */
+async function uploadAndSend() {
+  const file = fileInput.files[0];
+  if (!file) {
+    alert('Выберите файл');
+    return;
+  }
+  if (file.size > 50 * 1024 * 1024) {
+    alert('>50 МБ — не загружаем');
+    return;
+  }
+
+  const userId = HARDCODED_USER_ID;
+  const key = `${Date.now()}_${safeName(file.name)}`;
+
+  // 6.1. Загрузка в storage
+  const { error: upErr } = await sb.storage
+    .from('user-uploads')
+    .upload(key, file, { upsert: true });
+  if (upErr) {
+    alert('Upload: ' + upErr.message);
+    return;
+  }
+
+  // 6.2. Вставка в таблицу requests
+  const { data: reqRow, error: rowErr } = await sb
+    .from('requests')
+    .insert({ user_id: userId, file_path: key, status: 'pending' })
+    .select()
+    .single();
+  if (rowErr) {
+    alert(rowErr.message);
+    return;
+  }
+
+  // 6.3. Вызов Edge‑Function (не дожидаемся результата)
+  try {
+    const r = await fetch(FN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ request_id: reqRow.id })
     });
-    fileInput.addEventListener('change', e => {
-      const f = e.target.files[0];
-      if (f) preview(f);
-    });
+    if (!r.ok) console.error('Edge Function:', await r.text());
+  } catch (e) {
+    console.error(e);
+  }
 
-    /* 5. История ↓ */
-    async function loadHistory() {
-      tbody.innerHTML = '';
-      /* Вместо sb.auth.getUser() подставляем жёстко HARDCODED_USER_ID */
-      const userId = HARDCODED_USER_ID;
+  // 6.4. Сброс UI
+  fileInput.value = '';
+  filesBox.innerHTML = '';
+  sendBtn.disabled = true;
+  loadHistory();
+}
 
-      const { data, error } = await sb
-        .from('requests')
-        .select('*')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false });
+sendBtn.addEventListener('click', uploadAndSend);
 
-      if (error) {
-        console.error(error);
-        return;
-      }
-      data.forEach(r => {
-        const url = r.response_path
-          ? sb.storage.from('user-uploads').getPublicUrl(r.response_path).data.publicUrl
-          : null;
-        tbody.insertAdjacentHTML('beforeend', `
-          <tr>
-            <td>${new Date(r.created_at).toLocaleString()}</td>
-            <td>${r.file_path}</td>
-            <td>${r.status}</td>
-            <td>${url ? `<a href="${url}" target="_blank">CSV</a>` : '—'}</td>
-          </tr>`);
-      });
-    }
-
-    /* 6. Загрузка файла + Edge Function ↓ */
-    async function uploadAndSend() {
-      const file = fileInput.files[0];
-      if (!file) {
-        alert('Выберите файл');
-        return;
-      }
-      if (file.size > 50 * 1024 * 1024) {
-        alert('>50 МБ — не загружаем');
-        return;
-      }
-
-      const userId = HARDCODED_USER_ID;
-      const key = `${Date.now()}_${safeName(file.name)}`;
-
-      // 6.1. Загрузка в storage
-      const { data: { signedUrl }, error: urlErr } = await sb
-  .storage
-  .from('user-uploads')
-  .createSignedUrl(r.response_path, 60);
-if (urlErr) { console.error(urlErr); return; }
-linkElement.href = signedUrl;
-
-      // 6.2. Вставка в таблицу requests
-      const { data: reqRow, error: rowErr } = await sb
-        .from('requests')
-        .insert({ user_id: userId, file_path: key, status: 'pending' })
-        .select()
-        .single();
-      if (rowErr) {
-        alert(rowErr.message);
-        return;
-      }
-
-      // 6.3. Вызов Edge‑Function (не дожидаемся результата)
-      try {
-        const r = await fetch(FN_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ request_id: reqRow.id })
-        });
-        if (!r.ok) console.error('Edge Function:', await r.text());
-      } catch (e) {
-        console.error(e);
-      }
-
-      // 6.4. Сброс UI
-      fileInput.value = '';
-      filesBox.innerHTML = '';
-      sendBtn.disabled = true;
-      loadHistory();
-    }
-
-    sendBtn.addEventListener('click', uploadAndSend);
-
-    /* 7. Загрузка истории сразу при старте ↓ */
-    loadHistory();
-
-  </script>
+/* 7. Загрузка истории сразу при старте ↓ */
+loadHistory();
+</script>
 </body>
 </html>
